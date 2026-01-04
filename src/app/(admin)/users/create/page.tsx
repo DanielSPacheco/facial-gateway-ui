@@ -1,0 +1,221 @@
+"use client";
+
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabase/client";
+import { getSiteContext } from "@/lib/site-context";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Loader2, Save } from "lucide-react";
+import { toast } from "sonner";
+
+export default function CreateUserPage() {
+    const router = useRouter();
+    const [loading, setLoading] = useState(false);
+
+    const [formData, setFormData] = useState({
+        userID: "",
+        name: "",
+        password: "",
+        cardNo: "",
+        block: "",
+        apartment: "",
+    });
+    const [selectedFile, setSelectedFile] = useState<File | null>(null);
+
+    const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const { name, value } = e.target;
+
+        // Validation for Card Number: Numeric only, max 10 chars
+        if (name === "cardNo") {
+            const numericValue = value.replace(/\D/g, "").slice(0, 10);
+            setFormData({ ...formData, [name]: numericValue });
+            return;
+        }
+
+        setFormData({ ...formData, [name]: value });
+    };
+
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files[0]) {
+            setSelectedFile(e.target.files[0]);
+        }
+    };
+
+    const convertToBase64 = (file: File): Promise<string> => {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.readAsDataURL(file);
+            reader.onload = () => resolve(reader.result as string);
+            reader.onerror = (error) => reject(error);
+        });
+    };
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setLoading(true);
+
+        try {
+            const { siteId, clientId } = await getSiteContext();
+
+            // 0. Insert into public.users (Source of Truth for UI)
+            const { error: dbError } = await supabase.from("users").insert({
+                user_id: formData.userID,
+                name: formData.name,
+                client_id: clientId,
+                authority: 2,
+                block: formData.block || null,
+                apartment: formData.apartment || null,
+                card_no: formData.cardNo || null
+            });
+
+            if (dbError) throw new Error("Failed to save user to DB: " + dbError.message);
+
+            // 1. Create User Job
+            const { error: userError } = await supabase.from("jobs").insert({
+                site_id: siteId,
+                client_id: clientId,
+                type: "create_user",
+                payload: {
+                    userID: formData.userID,
+                    userName: formData.name,
+                    password: formData.password,
+                    authority: 2, // default to normal user
+                    block: formData.block,
+                    apartment: formData.apartment
+                },
+                status: "pending"
+            });
+
+            if (userError) throw new Error("Failed to create user: " + userError.message);
+
+            // 2. Add Card Job (if provided)
+            if (formData.cardNo) {
+                await new Promise(r => setTimeout(r, 500));
+                const { error: cardError } = await supabase.from("jobs").insert({
+                    site_id: siteId,
+                    client_id: clientId,
+                    type: "add_card",
+                    payload: {
+                        userID: formData.userID,
+                        cardNo: formData.cardNo
+                    },
+                    status: "pending"
+                });
+                if (cardError) console.error("Failed to add card:", cardError);
+            }
+
+            // 3. Upload Face Job (if provided)
+            if (selectedFile) {
+                const base64Data = await convertToBase64(selectedFile);
+
+                const { error: faceError } = await supabase.from("jobs").insert({
+                    site_id: siteId,
+                    client_id: clientId,
+                    type: "upload_face_base64",
+                    payload: {
+                        userID: formData.userID,
+                        photoData: base64Data
+                    },
+                    status: "pending"
+                });
+                if (faceError) console.error("Failed to upload face:", faceError);
+            }
+
+            toast.success("User created successfully! Jobs queued.");
+            router.push("/users");
+
+        } catch (err: any) {
+            console.error(err);
+            toast.error(err.message || "An error occurred");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <div className="p-8 max-w-2xl mx-auto space-y-6">
+            <h1 className="text-3xl font-bold tracking-tight">Create User</h1>
+
+            <Card>
+                <CardHeader>
+                    <CardTitle>User Details</CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <form onSubmit={handleSubmit} className="space-y-4">
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium">User ID</label>
+                            <Input
+                                name="userID"
+                                placeholder="e.g. 888"
+                                required
+                                value={formData.userID}
+                                onChange={handleInputChange}
+                            />
+                        </div>
+
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium">Name</label>
+                            <Input
+                                name="name"
+                                placeholder="User Full Name"
+                                required
+                                value={formData.name}
+                                onChange={handleInputChange}
+                            />
+                        </div>
+
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium">Password</label>
+                            <Input
+                                name="password"
+                                type="password"
+                                placeholder="Device Password"
+                                required
+                                value={formData.password}
+                                onChange={handleInputChange}
+                            />
+                        </div>
+
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium">Card Number (Optional)</label>
+                            <Input
+                                name="cardNo"
+                                placeholder="Card / Tag ID (Max 10 digits)"
+                                value={formData.cardNo}
+                                onChange={handleInputChange}
+                                maxLength={10}
+                                inputMode="numeric"
+                            />
+                            <p className="text-xs text-muted-foreground">
+                                Format: Decimal (0-9). Max 10 characters.
+                            </p>
+                        </div>
+
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium">Face Photo (Optional)</label>
+                            <Input
+                                type="file"
+                                accept="image/jpeg,image/png"
+                                onChange={handleFileChange}
+                            />
+                            <p className="text-xs text-muted-foreground">
+                                Max 14KB, JPG preferred. Frontal face, good lighting.
+                            </p>
+                        </div>
+
+                        <div className="pt-4 flex gap-4">
+                            <Button type="button" variant="outline" onClick={() => router.back()}>Cancel</Button>
+                            <Button type="submit" disabled={loading} className="gap-2">
+                                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                                {loading ? "Queueing..." : "Create User"}
+                            </Button>
+                        </div>
+
+                    </form>
+                </CardContent>
+            </Card>
+        </div>
+    );
+}
