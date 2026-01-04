@@ -1,36 +1,149 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 📦 Facial Gateway – Intelbras
 
-## Getting Started
+A **facial access control platform** built around a **custom gateway architecture**, integrating **Intelbras facial devices** with modern applications through **REST APIs** and a **web-based management interface**.
 
-First, run the development server:
+This project is designed as a **SaaS / IoT foundation**, enabling centralized management of users, devices, events, and actions such as **remote door opening**.
+
+---
+
+## 🧠 Architecture Overview
+
+[ Web UI (Next.js) ]
+↓
+[ API Gateway (Node.js) ]
+↓
+[ Intelbras Facial Devices ]
+
+
+- **Frontend**: Admin panel and resident portal  
+- **Backend**: Gateway responsible for device communication  
+- **Agent**: Local network communication with facial devices  
+- **Extensible**: Designed to support additional manufacturers in the future  
+
+---
+
+## 📁 Repositories
+
+### 🔧 Backend (Gateway)
+
+- **Repository:** `facial-gateway-intelbras`
+- **Stack:** Node.js · REST API · Intelbras Integration (ISAPI / RPC)
+
+**Responsibilities:**
+- Direct integration with Intelbras facial devices  
+- Remote door opening  
+- User and card management  
+- REST API exposure for external systems  
+- Extensible architecture for multi-vendor support  
+
+---
+
+### 🎨 Frontend (UI)
+
+- **Repository:** `facial-gateway-ui`
+- **Stack:** Next.js (App Router) · TypeScript · Tailwind CSS · shadcn/ui
+
+**Responsibilities:**
+- Administrative dashboard  
+- Resident portal  
+- Device, user, and log management  
+- Real-time actions (e.g., open door)  
+
+---
+
+## 🔐 Core Features
+
+### Backend
+- 🔌 Direct integration with Intelbras devices  
+- 🚪 Remote door control  
+- 👤 User and card management  
+- 📡 REST API communication  
+- 🧩 Multi-vendor-ready architecture  
+
+### Frontend
+- 🧑‍💼 Admin area  
+- 🏠 Resident area  
+- 📊 Dashboard  
+- 🖥️ Device management  
+- 📜 Event logs  
+- 🔘 Real-time actions  
+
+---
+
+## ▶️ Running Locally
+
+### Backend
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+
+```
+.Env example
+
+``` .env
+INTELBRAS_HOST=
+INTELBRAS_USER=
+INTELBRAS_PASSWORD=
+PORT=3000
+
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Frontend
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+npm install
+npm run dev
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```
 
-## Learn More
+Create .env local
 
-To learn more about Next.js, take a look at the following resources:
+``` .env
+NEXT_PUBLIC_API_URL=http://localhost:3000
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+src/app
+├── (auth)        # Authentication (login)
+├── (admin)       # Admin dashboard
+│   ├── devices
+│   ├── users
+│   ├── logs
+│   └── units
+├── (resident)    # Resident portal
+├── api           # Internal Next.js API routes
+└── components    # UI components and app shell
 
-## Deploy on Vercel
+## 🚧 Project Status
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+🟡 Actively under development
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Planned next steps:
+
+- Full end-to-end flow (UI → API → Device)
+- Authentication (JWT / middleware)
+- Frontend deployment (Vercel)
+- Audit logs and monitoring
+- Webhooks
+- Multi-device and multi-tenant support
+
+## 🎯 Project Goal
+
+To build a modern, extensible facial access control platform focused on:
+
+- Residential condominiums
+- Enterprises
+- IoT and smart buildings
+- Future integrations with ERPs and CRMs
+
+## 👨‍💻 Author
+
+Daniel Silveira Pacheco
+
+Node.js · REST APIs · Next.js · IoT · SaaS
+
+🇧🇷 Brazil | 🌍 Open to global opportunities
+
+GitHub: https://github.com/DanielSPacheco
+LinkedIn: https://www.linkedin.com/in/danielsilveirap
