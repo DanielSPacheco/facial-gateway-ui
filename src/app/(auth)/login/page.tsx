@@ -7,17 +7,27 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Loader2, ShieldCheck, Mail, Lock } from "lucide-react";
+import { getTenantFromHostname } from "@/lib/tenant-utils";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{ message: string; type: "error" | "warning" } | null>(null);
+  const [tenant, setTenant] = useState<string | null>(null);
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
   const router = useRouter();
 
   useEffect(() => {
     router.prefetch("/dashboard");
+    // Multi-tenant preparation
+    if (typeof window !== "undefined") {
+      const currentTenant = getTenantFromHostname(window.location.hostname);
+      setTenant(currentTenant);
+      if (currentTenant) {
+        console.log("Detected tenant:", currentTenant);
+      }
+    }
   }, [router]);
 
   // Handle subtle 3D parallax effect on mouse move
@@ -41,12 +51,25 @@ export default function LoginPage() {
       });
 
       if (error) {
-        setError(error.message);
+        console.error("Login error:", error);
+        // Map common Supabase/Auth errors to user friendly messages
+        if (error.message.includes("Invalid login credentials") || error.message.includes("invalid_credentials")) {
+          setError({ message: "Credenciais inválidas. Verifique e tente novamente.", type: "error" });
+        } else if (error.message.includes("Email not confirmed")) {
+          setError({ message: "Email não confirmado. Verifique sua caixa de entrada.", type: "warning" });
+        } else {
+          setError({ message: error.message || "Erro ao realizar login.", type: "error" });
+        }
       } else {
         router.push("/dashboard");
       }
     } catch (err: any) {
-      setError(err.message || "An unexpected error occurred");
+      console.error("Unexpected login error:", err);
+      if (err.message && err.message.includes("fetch")) {
+        setError({ message: "Servidor indisponível. Verifique sua conexão.", type: "warning" });
+      } else {
+        setError({ message: "Um erro inesperado ocorreu. Tente novamente.", type: "error" });
+      }
     } finally {
       setLoading(false);
     }
@@ -81,13 +104,18 @@ export default function LoginPage() {
             </CardTitle>
             <CardDescription className="text-white/50">
               Secure Access Control System
+              {tenant && <span className="block text-primary/80 text-xs mt-1 font-mono">Tenant: {tenant}</span>}
             </CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleLogin} className="space-y-5">
               {error && (
-                <div className="p-3 text-sm text-red-400 bg-red-900/20 border border-red-900/50 rounded-md text-center animate-in shake">
-                  {error}
+                <div className={`p-3 text-sm rounded-md text-center animate-in shake border ${error.type === 'error'
+                    ? 'text-red-400 bg-red-900/20 border-red-900/50'
+                    : 'text-yellow-400 bg-yellow-900/20 border-yellow-900/50'
+                  }`}>
+                  <span className="mr-2 font-bold">{error.type === 'error' ? '❌' : '⚠️'}</span>
+                  {error.message}
                 </div>
               )}
 
@@ -129,7 +157,7 @@ export default function LoginPage() {
                 disabled={loading}
               >
                 {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                {loading ? "Verifying..." : "Sign In"}
+                {loading ? "Entrando..." : "Sign In"}
               </Button>
             </form>
           </CardContent>

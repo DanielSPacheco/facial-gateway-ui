@@ -12,6 +12,10 @@ create table if not exists public.users (
   -- Resident Organization Fields (New)
   block text, -- e.g "Bloco 1"
   apartment text, -- e.g "101"
+
+  -- Role Based Access Control (New)
+  email text unique, -- Login email (links to auth.users if needed)
+  role text default 'resident' check (role in ('admin', 'operator', 'integrator', 'resident')),
   
   created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
@@ -38,4 +42,35 @@ create policy "Allow all access to users for authenticated users"
 on public.users for all
 to authenticated
 using (true)
-with check (true);
+
+-- 5. Update Facials table (Add Keep Alive Config)
+alter table public.facials add column if not exists keep_alive_enabled boolean default true;
+alter table public.facials add column if not exists probing_interval integer default 5; -- In minutes
+
+-- 6. Create Units table (For managing Blocks/Apartments)
+create table if not exists public.units (
+  id uuid default gen_random_uuid() primary key,
+  site_id uuid not null, -- To filter by site
+  block text not null, -- e.g. "Bloco 1"
+  name text not null, -- e.g. "101"
+  responsible_id uuid, -- Link to public.users(id)
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  
+  unique(site_id, block, name) -- Prevent duplicates
+);
+
+-- 7. Add RLS for Units
+alter table public.units enable row level security;
+
+create policy "Allow all access to units for authenticated users"
+on public.units for all
+to authenticated
+using (true);
+
+-- 8. Fix Foreign Key (REQUIRED for Joins)
+-- Run this if you are getting "Failed to load units" or join errors
+alter table public.units 
+add constraint units_responsible_id_fkey 
+foreign key (responsible_id) 
+references public.users(id)
+on delete set null;

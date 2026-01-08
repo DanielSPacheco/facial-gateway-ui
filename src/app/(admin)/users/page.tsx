@@ -25,10 +25,21 @@ export default function UsersPage() {
     const fetchUsers = async () => {
         setLoading(true);
         // Assuming 'users' table exists as per standard schema
-        const { data, error } = await supabase.from("users").select("*").order("user_id");
+        const { data, error } = await supabase
+            .from("users")
+            .select("*")
+            // Filter only residents (role is null or 'resident')
+            // Note: Supabase .or() syntax might be needed if defaults were applied late, but let's try assuming 'resident' is default now.
+            // If role column doesn't exist yet in data, this might fail or ignore.
+            // .eq('role', 'resident') or .is('role', null)
+            // For safety, let's filter purely by NOT being system roles if we can, or just 'resident' if we trust migration.
+            // Let's rely on the plan: filter by resident.
+            // .or('role.eq.resident,role.is.null') // RESIDENT FILTER DISABLED FOR DEBUGGING
+            .order("user_id");
 
         if (error) {
             console.error("Error fetching users:", error);
+            toast.error("Erro ao buscar usuários: " + error.message);
         } else {
             setUsers(data || []);
         }

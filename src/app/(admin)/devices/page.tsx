@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { RefreshCw, Server, HardDrive, Wifi, WifiOff } from "lucide-react";
+import { DeviceConfigDialog } from "@/components/DeviceConfigDialog";
 
 interface Agent {
     id: string;
@@ -20,6 +21,8 @@ interface Facial {
     name: string;
     ip: string;
     channel: number;
+    keep_alive_enabled: boolean;
+    probing_interval: number;
 }
 
 export default function DevicesPage() {
@@ -124,14 +127,20 @@ export default function DevicesPage() {
                                         <p className="text-sm text-muted-foreground">{facial.ip} • Canal {facial.channel}</p>
                                     </div>
                                 </div>
-                                <Badge variant="outline" className="border-green-500/50 text-green-500">
-                                    Ativo
-                                </Badge>
+                                <div className="flex items-center gap-2">
+                                    <Badge variant="outline" className="border-green-500/50 text-green-500">
+                                        Ativo
+                                    </Badge>
+                                    <DeviceConfigDialog
+                                        device={facial}
+                                        onUpdate={fetchData}
+                                    />
+                                </div>
                             </div>
                         ))}
                     </div>
                 </CardContent>
             </Card>
-        </div>
+        </div >
     );
 }

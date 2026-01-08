@@ -1,5 +1,7 @@
 import { OpenDoorButton } from "@/components/OpenDoorButton";
 import { AgentStatusCard } from "@/components/AgentStatusCard";
+import { DashboardHistory } from "@/components/DashboardHistory";
+import { ActiveUsersCard } from "@/components/ActiveUsersCard";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 export default function Dashboard() {
@@ -27,19 +29,11 @@ export default function Dashboard() {
                 </Card>
 
                 {/* Placeholder for stats */}
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">
-                            Active Users
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">--</div>
-                        <p className="text-xs text-muted-foreground">
-                            Users loaded from DB
-                        </p>
-                    </CardContent>
-                </Card>
+                {/* Active Users */}
+                <ActiveUsersCard />
+
+                {/* Quick History Section */}
+                <DashboardHistory />
             </div>
         </div>
     );

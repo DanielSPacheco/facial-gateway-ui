@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 import { getSiteContext } from "@/lib/site-context";
+import { fileToCompressedDataUrl } from "@/lib/image-utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -59,7 +60,20 @@ export default function CreateUserPage() {
         try {
             const { siteId, clientId } = await getSiteContext();
 
-            // 0. Insert into public.users (Source of Truth for UI)
+            let base64Data = "";
+            // 0. Process Image (if provided)
+            if (selectedFile) {
+                const { dataUrl, bytes } = await fileToCompressedDataUrl(selectedFile);
+                if (bytes > 15 * 1024) {
+                    toast.error(`Imagem muito grande (${Math.round(bytes / 1024)}KB). Limite ~14KB.`);
+                    setLoading(false);
+                    return;
+                }
+                base64Data = dataUrl;
+            }
+
+            // 1. Insert into public.users (Source of Truth for UI)
+            // Now including photo_data
             const { error: dbError } = await supabase.from("users").insert({
                 user_id: formData.userID,
                 name: formData.name,
@@ -67,12 +81,13 @@ export default function CreateUserPage() {
                 authority: 2,
                 block: formData.block || null,
                 apartment: formData.apartment || null,
-                card_no: formData.cardNo || null
+                card_no: formData.cardNo || null,
+                photo_data: base64Data || null // Save to DB
             });
 
             if (dbError) throw new Error("Failed to save user to DB: " + dbError.message);
 
-            // 1. Create User Job
+            // 2. Create User Job
             const { error: userError } = await supabase.from("jobs").insert({
                 site_id: siteId,
                 client_id: clientId,
@@ -90,9 +105,27 @@ export default function CreateUserPage() {
 
             if (userError) throw new Error("Failed to create user: " + userError.message);
 
-            // 2. Add Card Job (if provided)
+            // 3. Add Card Job (if provided)
             if (formData.cardNo) {
-                await new Promise(r => setTimeout(r, 500));
+                // 3a. Save to DB (Source of Truth)
+                const { error: dbCardError } = await supabase.from("user_cards").insert({
+                    site_id: siteId,
+                    client_id: clientId,
+                    user_id: formData.userID, // Use the ID we just created
+                    card_no: formData.cardNo
+                });
+                if (dbCardError) {
+                    // Log but don't block? Or block?
+                    // If duplicate, it might fail.
+                    console.error("Failed to save card to DB:", dbCardError);
+                    if (dbCardError.code !== '23505') { // Ignore duplicate key
+                        toast.error("Erro ao salvar cartão no banco: " + dbCardError.message);
+                    }
+                }
+
+                await new Promise(r => setTimeout(r, 200));
+
+                // 3b. Queue Job
                 const { error: cardError } = await supabase.from("jobs").insert({
                     site_id: siteId,
                     client_id: clientId,
@@ -106,17 +139,15 @@ export default function CreateUserPage() {
                 if (cardError) console.error("Failed to add card:", cardError);
             }
 
-            // 3. Upload Face Job (if provided)
-            if (selectedFile) {
-                const base64Data = await convertToBase64(selectedFile);
-
+            // 4. Upload Face Job (if provided)
+            if (base64Data) {
                 const { error: faceError } = await supabase.from("jobs").insert({
                     site_id: siteId,
                     client_id: clientId,
                     type: "upload_face_base64",
                     payload: {
                         userID: formData.userID,
-                        photoData: base64Data
+                        photoData: base64Data // Use compressed data
                     },
                     status: "pending"
                 });
