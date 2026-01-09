@@ -79,8 +79,6 @@ export function UnitFormDialog({ open, onOpenChange, unitToEdit, onSuccess }: Un
                     .eq("id", unitToEdit.id);
 
                 if (error) throw error;
-                toast.success("Unidade atualizada com sucesso");
-
             } else {
                 // Insert
                 const { error } = await supabase
@@ -93,8 +91,25 @@ export function UnitFormDialog({ open, onOpenChange, unitToEdit, onSuccess }: Un
                     });
 
                 if (error) throw error;
-                toast.success("Unidade criada com sucesso");
             }
+
+            // SYNC: Update the assigned user's profile with this address
+            if (formData.responsibleId) {
+                const { error: userError } = await supabase
+                    .from("users")
+                    .update({
+                        block: formData.block,
+                        apartment: formData.name
+                    })
+                    .eq("id", formData.responsibleId);
+
+                if (userError) {
+                    console.error("Failed to sync user address:", userError);
+                    toast.warning("Unidade salva, mas erro ao atualizar endereço do morador.");
+                }
+            }
+
+            toast.success(unitToEdit ? "Unidade atualizada!" : "Unidade criada!");
 
             onSuccess();
             onOpenChange(false);

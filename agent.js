@@ -19,17 +19,33 @@
  */
 
 const path = require("path");
-require("dotenv").config({ path: path.join(__dirname, ".env") });
+// function nowIso() { ... } // (This is moving the shim, so I need to be careful with replace)
+// Actually, I will just move the shim block to line 23
+require("dotenv").config({ path: path.join(__dirname, ".env.local") });
+
+// Env Shim for Next.js variables
+if (!process.env.SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_URL) {
+  process.env.SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
+}
+if (!process.env.SUPABASE_SERVICE_ROLE_KEY && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+  process.env.SUPABASE_SERVICE_ROLE_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+}
+if (!process.env.SITE_ID && process.env.NEXT_PUBLIC_SITE_ID) {
+  process.env.SITE_ID = process.env.NEXT_PUBLIC_SITE_ID;
+}
+if (!process.env.AGENT_ID) {
+  process.env.AGENT_ID = "local-agent";
+}
 
 const { createClient } = require("@supabase/supabase-js");
 
 // ========================
 // ENV
 // ========================
-const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-const SITE_ID = process.env.SITE_ID;
+const SITE_ID = process.env.SITE_ID || process.env.NEXT_PUBLIC_SITE_ID;
 const AGENT_ID = process.env.AGENT_ID;
 
 const GATEWAY_BASE_URL = process.env.GATEWAY_BASE_URL || "http://127.0.0.1:3000";
@@ -58,6 +74,21 @@ function sleep(ms) {
 
 function nowIso() {
   return new Date().toISOString();
+}
+
+// Env Shim for Next.js variables
+if (!process.env.SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_URL) {
+  process.env.SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
+}
+if (!process.env.SUPABASE_SERVICE_ROLE_KEY && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+  process.env.SUPABASE_SERVICE_ROLE_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+}
+if (!process.env.SITE_ID && process.env.NEXT_PUBLIC_SITE_ID) {
+  process.env.SITE_ID = process.env.NEXT_PUBLIC_SITE_ID;
+}
+if (!process.env.AGENT_ID) {
+  console.warn("AGENT_ID not found, using default 'local-agent'");
+  process.env.AGENT_ID = "local-agent";
 }
 
 // ========================
@@ -219,42 +250,101 @@ async function httpJson(url, body, timeoutMs = DEFAULT_HTTP_TIMEOUT_MS) {
 // ========================
 // GATEWAY CALL (job.type -> endpoint)
 // ========================
+// ========================
+// DB: FETCH DEVICE CONFIG
+// ========================
+async function getDeviceConfig(deviceId, siteId) {
+  // If deviceId provided, fetch specific
+  if (deviceId) {
+    const { data } = await supabase
+      .from("facials")
+      .select("*")
+      .eq("id", deviceId)
+      .single();
+    return data;
+  }
+  // Fallback: Fetch the first active device for the site
+  // useful for legacy jobs or single-device setups
+  const { data } = await supabase
+    .from("facials")
+    .select("*")
+    .eq("site_id", siteId)
+    .limit(1);
+
+  return data?.[0];
+}
+
+// ========================
+// GATEWAY CALL (job.type -> endpoint)
+// ========================
 async function callGateway(job) {
   const action = job.type;
   const payload = job.payload || {};
 
+  // Resolve Target Device
+  // Job payload might contain `device_id` or we infer it
+  const deviceConfig = await getDeviceConfig(payload.device_id, process.env.SITE_ID);
+
+  // Default connection params (Environment or Database)
+  let baseUrl = process.env.GATEWAY_BASE_URL || "http://127.0.0.1:3000";
+  let authHeader = {};
+
+  // Override if DB config exists
+  if (deviceConfig) {
+    // If we are targeting a specific DB device, we MUST have its IP.
+    if (!deviceConfig.ip && !deviceConfig.url) {
+      throw new Error(`Device '${deviceConfig.name}' (ID: ${deviceConfig.id}) has no IP or URL configured.`);
+    }
+
+    // modification: Pass `target_device` overrides in the payload to the gateway.
+    payload.target_device = {
+      ip: deviceConfig.ip, // STRICT: No fallback to env here
+      port: deviceConfig.port || 80,
+      username: deviceConfig.username, // Might be null if using secrets table but agent usually needs it passed or handled by gateway
+      password: deviceConfig.password,
+      channel: deviceConfig.channel || 1,
+      protocol: deviceConfig.protocol || 'isapi'
+    };
+
+    // Log for debug (careful with passwords)
+    console.log(`[AGENT] Routing to device: ${deviceConfig.name} (${payload.target_device.ip})`);
+  } else {
+    // Legacy/Fallback Mode
+    console.log("[AGENT] No specific device found, using ENV defaults via Gateway");
+  }
+
   switch (action) {
     // Operations
     case "open_door":
-      return httpJson(`${GATEWAY_BASE_URL}/facial/door/open`, payload);
+      return httpJson(`${baseUrl}/facial/door/open`, payload);
 
-    // Users (standard + legacy aliases)
+    // Users
     case "create_user":
     case "user_create":
-      return httpJson(`${GATEWAY_BASE_URL}/facial/user/create`, payload);
+      return httpJson(`${baseUrl}/facial/user/create`, payload);
 
     case "update_user":
     case "user_update":
-      return httpJson(`${GATEWAY_BASE_URL}/facial/user/update`, payload);
+      return httpJson(`${baseUrl}/facial/user/update`, payload);
 
     case "delete_user":
     case "user_delete":
-      return httpJson(`${GATEWAY_BASE_URL}/facial/user/delete`, payload);
+      return httpJson(`${baseUrl}/facial/user/delete`, payload);
 
-    // TAG / Card
+    // Cards
     case "add_card":
     case "card_add":
-      return httpJson(`${GATEWAY_BASE_URL}/facial/card/add`, payload);
+      return httpJson(`${baseUrl}/facial/card/add`, payload);
 
     case "delete_card":
     case "card_delete":
-      return httpJson(`${GATEWAY_BASE_URL}/facial/card/delete`, payload);
+      return httpJson(`${baseUrl}/facial/card/delete`, payload);
 
     // Face
     case "face_upload_base64":
     case "upload_face_base64":
       return httpJson(
-        `${GATEWAY_BASE_URL}/facial/face/uploadBase64`,
+        `${baseUrl}/facial/face/uploadBase64`,
         payload,
         FACE_HTTP_TIMEOUT_MS
       );
@@ -316,6 +406,14 @@ async function main() {
       if (result?.ok === true) {
         await completeJob(job.id, result);
         console.log(`[JOB] done   ${job.id}`);
+
+        // UPDATE DEVICE STATUS (Alive)
+        if (job.payload?.device_id) {
+          await supabase
+            .from("facials")
+            .update({ last_seen_at: nowIso() })
+            .eq("id", job.payload.device_id);
+        }
       } else {
         const reason = result?.error || "GATEWAY_ERROR";
         const info = await failOrRetryJob(job, reason, result);

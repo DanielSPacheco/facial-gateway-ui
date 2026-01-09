@@ -47,6 +47,42 @@ using (true)
 alter table public.facials add column if not exists keep_alive_enabled boolean default true;
 alter table public.facials add column if not exists probing_interval integer default 5; -- In minutes
 
+-- 9. Update Facials table (Multi-Device Support) - Metadata Only
+alter table public.facials add column if not exists protocol text default 'isapi'; -- isapi, rpc, http
+alter table public.facials add column if not exists port integer default 80;
+alter table public.facials add column if not exists location_description text;
+alter table public.facials add column if not exists channel integer default 1; -- door index
+
+-- OLD MIGRATION (Deprecated by Secure Approach):
+-- alter table public.facials add column if not exists username text;
+-- alter table public.facials add column if not exists password text;
+
+-- 10. Secure Secrets Table (Backend Only Access)
+create table if not exists public.facial_secrets (
+    facial_id uuid references public.facials(id) on delete cascade primary key,
+    username text,
+    password text,
+    created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- Enable RLS on secrets
+alter table public.facial_secrets enable row level security;
+
+-- Policy: DENY ALL for anon/authenticated (SERVICE ROLE ONLY)
+-- No create policy -> default deny.
+-- No select policy -> default deny.
+-- Only Service Role can access.
+
+-- Migration helper: If you already ran step 9 with username/password, move data:
+-- insert into public.facial_secrets (facial_id, username, password)
+-- select id, username, password from public.facials
+-- where username is not null
+-- on conflict do nothing;
+
+-- Then drop columns from facials to be safe:
+-- alter table public.facials drop column username;
+-- alter table public.facials drop column password;
+
 -- 6. Create Units table (For managing Blocks/Apartments)
 create table if not exists public.units (
   id uuid default gen_random_uuid() primary key,

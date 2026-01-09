@@ -100,7 +100,7 @@ export default function LoginPage() {
         <Card className="border-white/10 bg-black/40 backdrop-blur-xl shadow-2xl ring-1 ring-white/5 animate-in slide-in-from-bottom-5 duration-700">
           <CardHeader className="text-center space-y-2">
             <CardTitle className="text-3xl font-bold tracking-tight bg-gradient-to-br from-white to-white/60 bg-clip-text text-transparent">
-              GateFlow
+              SecureEntry
             </CardTitle>
             <CardDescription className="text-white/50">
               Secure Access Control System
@@ -111,8 +111,8 @@ export default function LoginPage() {
             <form onSubmit={handleLogin} className="space-y-5">
               {error && (
                 <div className={`p-3 text-sm rounded-md text-center animate-in shake border ${error.type === 'error'
-                    ? 'text-red-400 bg-red-900/20 border-red-900/50'
-                    : 'text-yellow-400 bg-yellow-900/20 border-yellow-900/50'
+                  ? 'text-red-400 bg-red-900/20 border-red-900/50'
+                  : 'text-yellow-400 bg-yellow-900/20 border-yellow-900/50'
                   }`}>
                   <span className="mr-2 font-bold">{error.type === 'error' ? '❌' : '⚠️'}</span>
                   {error.message}
@@ -126,7 +126,7 @@ export default function LoginPage() {
                     <Mail className="absolute left-3 top-3 h-4 w-4 text-white/40 group-focus-within:text-primary transition-colors" />
                     <Input
                       type="email"
-                      placeholder="admin@gateflow.com"
+                      placeholder="admin@secureentry.com"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       required

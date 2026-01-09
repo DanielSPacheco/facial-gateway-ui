@@ -6,7 +6,7 @@ import { getSiteContext } from "@/lib/site-context";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { RefreshCw, Server, HardDrive, Wifi, WifiOff } from "lucide-react";
+import { RefreshCw, Server, HardDrive, Wifi, WifiOff, Plus } from "lucide-react";
 import { DeviceConfigDialog } from "@/components/DeviceConfigDialog";
 
 interface Agent {
@@ -23,6 +23,10 @@ interface Facial {
     channel: number;
     keep_alive_enabled: boolean;
     probing_interval: number;
+    protocol?: string;
+    port?: number;
+    username?: string;
+    password?: string;
 }
 
 export default function DevicesPage() {
@@ -72,9 +76,21 @@ export default function DevicesPage() {
                     <h1 className="text-3xl font-bold tracking-tight">Equipamentos</h1>
                     <p className="text-muted-foreground">Gerencie os controladores de acesso e agentes.</p>
                 </div>
-                <Button variant="outline" size="icon" onClick={fetchData}>
-                    <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-                </Button>
+                <div className="flex gap-2">
+                    <DeviceConfigDialog
+                        onUpdate={fetchData}
+                        trigger={
+                            <Button>
+                                <Plus className="mr-2 h-4 w-4" />
+                                Novo Dispositivo
+                            </Button>
+                        }
+                        device={null}
+                    />
+                    <Button variant="outline" size="icon" onClick={fetchData}>
+                        <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+                    </Button>
+                </div>
             </div>
 
             {/* Agents Section */}

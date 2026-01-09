@@ -49,7 +49,7 @@ export function WebhookConfigDialog({ trigger }: { trigger: React.ReactNode }) {
                         Configurar Webhook
                     </DialogTitle>
                     <DialogDescription>
-                        Envie eventos do GateFlow para sistemas externos em tempo real.
+                        Envie eventos do SecureEntry para sistemas externos em tempo real.
                     </DialogDescription>
                 </DialogHeader>
                 <div className="grid gap-4 py-4">

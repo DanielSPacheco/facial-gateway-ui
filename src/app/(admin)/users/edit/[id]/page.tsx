@@ -12,7 +12,7 @@ import { Loader2, Save, CreditCard, Upload, Camera, AlertTriangle, CheckCircle2,
 import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label";
-import { fileToCompressedDataUrl } from "@/lib/image-utils";
+import { FaceUpload } from "@/components/FaceUpload";
 
 export default function EditUserPage() {
     const router = useRouter();
@@ -39,12 +39,8 @@ export default function EditUserPage() {
     const [cardSaving, setCardSaving] = useState(false);
 
     // Bio Data
-    // Bio Data
     const [photoData, setPhotoData] = useState<string>("");
-    const [photoPreview, setPhotoPreview] = useState<string>("");
     const [bioSaving, setBioSaving] = useState(false);
-    const fileInputRef = useRef<HTMLInputElement>(null);
-    const [isDragging, setIsDragging] = useState(false);
 
     // Unit Selection State
     const [availableBlocks, setAvailableBlocks] = useState<string[]>([]);
@@ -81,15 +77,12 @@ export default function EditUserPage() {
 
             // Note: Card number might be in DB, but we usually want to overwrite or add new.
             // If we store it, we can show it.
-            if (data.card_no) setCardNo(data.card_no);
+            // if (data.card_no) setCardNo(data.card_no); // Legacy: Don't prefill "New Card" input
 
             if (data.block) setSelectedBlock(data.block);
 
             // Existing Photo
             if (data.photo_data) {
-                setPhotoPreview(data.photo_data);
-                // We don't necessarily set photoData (the payload for upload) unless they want to re-upload the SAME photo?
-                // Actually, if they want to sync again, we might need it.
                 setPhotoData(data.photo_data);
             }
         } catch (e: any) {
@@ -101,15 +94,25 @@ export default function EditUserPage() {
 
     const fetchCards = async () => {
         try {
-            const { clientId } = await getSiteContext();
+            const { siteId } = await getSiteContext();
+            // We need the internal User UUID, not the devices ID.
+            // We can get it from the user fetch or a separate lookup.
+            // Assuming we fetch user first, let's store it or just query by user_id(text) if possible?
+            // Actually, cards table links to UUID.
+
+            // Allow looking up by joining users? Or just rely on the fact we are on edit page.
+            // Let's rely on finding the UUID first.
+
+            // Better strategy: fetchCards called after fetchUser?
+            // Or just join.
             const { data } = await supabase
-                .from("user_cards")
-                .select("id, card_no")
-                .eq("user_id", userIdDevice)
-                .eq("client_id", clientId)
+                .from("cards")
+                .select("id, card_number, user_id, users!inner(user_id)")
+                .eq("site_id", siteId)
+                .eq("users.user_id", userIdDevice) // Join filtering
                 .order("created_at", { ascending: false });
 
-            if (data) setCards(data);
+            if (data) setCards(data.map(d => ({ id: d.id, card_no: d.card_number })));
         } catch (e) {
             console.error("Error fetching cards:", e);
         }
@@ -212,17 +215,21 @@ export default function EditUserPage() {
         try {
             const { siteId, clientId } = await getSiteContext();
 
-            // 1. Insert into public.user_cards
-            const { error: dbError } = await supabase.from("user_cards").insert({
-                client_id: clientId,
-                user_id: userIdDevice,
-                card_no: cardNo,
-                site_id: siteId // optional if helpful
+            // 1. Insert into public.cards
+            // We need the UUID. 
+            // Fetch it quickly if needed (or store in state from fetchUser)
+            const { data: userData } = await supabase.from("users").select("id").eq("user_id", userIdDevice).single();
+            if (!userData) throw new Error("User UUID not found");
+
+            const { error: dbError } = await supabase.from("cards").insert({
+                site_id: siteId,
+                user_id: userData.id,
+                card_number: cardNo,
             });
 
             if (dbError) {
                 if (dbError.code === '23505') {
-                    toast.error("Este cartão já está cadastrado para este usuário.");
+                    toast.error("Este cartão já está cadastrado.");
                 } else {
                     throw new Error(dbError.message);
                 }
@@ -264,7 +271,7 @@ export default function EditUserPage() {
             const { siteId, clientId } = await getSiteContext();
 
             // 1. Remove from DB
-            await supabase.from("user_cards").delete().eq("id", cardToDelete.id);
+            await supabase.from("cards").delete().eq("id", cardToDelete.id);
 
             // 2. Queue 'card_delete' Job
             const { data: jobData } = await supabase.from("jobs").insert({
@@ -285,62 +292,6 @@ export default function EditUserPage() {
 
         } catch (err: any) {
             toast.error("Erro ao remover cartão: " + err.message);
-        }
-    };
-
-
-
-    // --- DRAG AND DROP HANDLERS ---
-    const handleDragOver = (e: React.DragEvent) => {
-        e.preventDefault();
-        setIsDragging(true);
-    };
-
-    const handleDragLeave = (e: React.DragEvent) => {
-        e.preventDefault();
-        setIsDragging(false);
-    };
-
-    const handleDrop = (e: React.DragEvent) => {
-        e.preventDefault();
-        setIsDragging(false);
-        if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-            processFile(e.dataTransfer.files[0]);
-        }
-    };
-
-    const processFile = async (file: File) => {
-        if (!file.type.startsWith("image/")) {
-            toast.error("Apenas arquivos de imagem são permitidos");
-            return;
-        }
-
-        try {
-            // Compress and resize client-side
-            // The utility now handles ultra-aggressive compression for <14KB limit
-            const { dataUrl, bytes } = await fileToCompressedDataUrl(file);
-
-            // Hard limit validation (14KB is approx 13600 chars of base64)
-            // 75KB was previous goal, but firmware is 14KB.
-            // Let's warn if > 15KB
-            if (bytes > 15 * 1024) {
-                toast.error(`Imagem muito grande (${Math.round(bytes / 1024)}KB). O limite é ~14KB.`);
-                // Still set it, user might want to try? Or block?
-                // Let's block to avoid agent error loop
-                return;
-            }
-
-            setPhotoData(dataUrl);
-            setPhotoPreview(dataUrl);
-        } catch (e: any) {
-            console.error(e);
-            toast.error("Erro ao processar imagem: " + e.message);
-        }
-    };
-
-    const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (e.target.files && e.target.files[0]) {
-            processFile(e.target.files[0]);
         }
     };
 
@@ -385,9 +336,6 @@ export default function EditUserPage() {
 
                 if (job.status === 'done') {
                     toast.success("Foto salva no dispositivo com sucesso! 📸");
-                    setPhotoData("");
-                    setPhotoPreview("");
-                    if (fileInputRef.current) fileInputRef.current.value = "";
                     return;
                 }
 
@@ -574,46 +522,15 @@ export default function EditUserPage() {
                             <CardDescription>Envie uma foto para o reconhecimento facial. Use fundo claro e boa iluminação.</CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-6">
-                            <div
-                                className={`flex flex-col items-center justify-center p-6 border-2 border-dashed rounded-lg transition-colors cursor-pointer ${isDragging ? 'border-primary bg-primary/10' : 'bg-muted/20 hover:bg-muted/40'}`}
-                                onClick={() => fileInputRef.current?.click()}
-                                onDragOver={handleDragOver}
-                                onDragLeave={handleDragLeave}
-                                onDrop={handleDrop}
-                            >
 
-                                {photoPreview ? (
-                                    <div className="relative w-48 h-48 rounded-md overflow-hidden border">
-                                        <img src={photoPreview} alt="Preview" className="w-full h-full object-cover" />
-                                        <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
-                                            <p className="text-white text-xs font-medium">Trocar Foto</p>
-                                        </div>
-                                    </div>
-                                ) : (
-                                    <div className="flex flex-col items-center gap-2 text-muted-foreground">
-                                        <Camera className="h-10 w-10 mb-2 opacity-50" />
-                                        <p className="font-medium">Clique para selecionar foto</p>
-                                        <p className="text-xs">JPG/JPEG (Max 2MB)</p>
-                                    </div>
-                                )}
-                                <input
-                                    type="file"
-                                    ref={fileInputRef}
-                                    className="hidden"
-                                    accept=".jpg,.jpeg"
-                                    onChange={handleFileSelect}
-                                />
-                            </div>
+                            <FaceUpload
+                                currentPhoto={photoData}
+                                onPhotoSelected={setPhotoData}
+                            />
 
-                            {photoPreview && (
-                                <div className="flex items-center gap-2 text-sm text-yellow-600 bg-yellow-500/10 p-3 rounded-md">
-                                    <AlertTriangle className="h-4 w-4" />
-                                    <span>Verifique se a foto está focada e centralizada.</span>
-                                </div>
-                            )}
                         </CardContent>
                         <CardFooter>
-                            <Button onClick={handleUploadFace} disabled={bioSaving || !photoPreview} className="gap-2 w-full sm:w-auto">
+                            <Button onClick={handleUploadFace} disabled={bioSaving || !photoData} className="gap-2 w-full sm:w-auto">
                                 {bioSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
                                 Sincronizar Face
                             </Button>

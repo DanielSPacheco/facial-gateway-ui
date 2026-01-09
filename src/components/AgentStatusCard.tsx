@@ -181,7 +181,7 @@ export function AgentStatusCard() {
     return (
         <Card className={`border-l-4 bg-card/50 ${config.enabled ? (status === 'online' ? 'border-l-emerald-500' : status === 'unstable' ? 'border-l-yellow-500' : status === 'offline' ? 'border-l-red-500' : 'border-l-gray-500') : 'border-l-gray-300'}`}>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Device Status</CardTitle>
+                <CardTitle className="text-sm font-medium">Status do Dispositivo</CardTitle>
                 <div suppressHydrationWarning>
                     <Activity className="h-4 w-4 text-muted-foreground" />
                 </div>
@@ -234,7 +234,7 @@ export function AgentStatusCard() {
 
                     {/* IP Info */}
                     <div className="pt-2 border-t border-white/5 mt-1 flex justify-between text-[10px] text-muted-foreground">
-                        <span>{deviceIp || "Searching..."}</span>
+                        <span>{deviceIp || "Procurando..."}</span>
                         <span>{lastChecked ? new Date(lastChecked).toLocaleTimeString() : ""}</span>
                     </div>
                 </div>

@@ -74,7 +74,9 @@ export default function CreateUserPage() {
 
             // 1. Insert into public.users (Source of Truth for UI)
             // Now including photo_data
-            const { error: dbError } = await supabase.from("users").insert({
+            // 1. Insert into public.users (Source of Truth for UI)
+            // Now including photo_data
+            const { data: userData, error: dbError } = await supabase.from("users").insert({
                 user_id: formData.userID,
                 name: formData.name,
                 client_id: clientId,
@@ -83,7 +85,7 @@ export default function CreateUserPage() {
                 apartment: formData.apartment || null,
                 card_no: formData.cardNo || null,
                 photo_data: base64Data || null // Save to DB
-            });
+            }).select().single();
 
             if (dbError) throw new Error("Failed to save user to DB: " + dbError.message);
 
@@ -108,11 +110,10 @@ export default function CreateUserPage() {
             // 3. Add Card Job (if provided)
             if (formData.cardNo) {
                 // 3a. Save to DB (Source of Truth)
-                const { error: dbCardError } = await supabase.from("user_cards").insert({
+                const { error: dbCardError } = await supabase.from("cards").insert({
                     site_id: siteId,
-                    client_id: clientId,
-                    user_id: formData.userID, // Use the ID we just created
-                    card_no: formData.cardNo
+                    user_id: userData.id, // Use the UUID from the inserted user
+                    card_number: formData.cardNo
                 });
                 if (dbCardError) {
                     // Log but don't block? Or block?
