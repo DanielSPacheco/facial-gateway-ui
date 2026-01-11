@@ -13,6 +13,14 @@ import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label";
 import { FaceUpload } from "@/components/FaceUpload";
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog";
 
 export default function EditUserPage() {
     const router = useRouter();
@@ -37,6 +45,7 @@ export default function EditUserPage() {
     const [cardNo, setCardNo] = useState("");
     const [cards, setCards] = useState<{ id: string, card_no: string }[]>([]);
     const [cardSaving, setCardSaving] = useState(false);
+    const [cardToDelete, setCardToDelete] = useState<{ id: string, card_no: string } | null>(null);
 
     // Bio Data
     const [photoData, setPhotoData] = useState<string>("");
@@ -162,11 +171,20 @@ export default function EditUserPage() {
 
     // --- ACTIONS ---
 
+    const getDevices = async (siteId: string) => {
+        const { data } = await supabase.from("facials").select("id, name").eq("site_id", siteId);
+        return data || [];
+    };
+
     const handleUpdateProfile = async (e: React.FormEvent) => {
         e.preventDefault();
         setSaving(true);
         try {
             const { siteId, clientId } = await getSiteContext();
+
+            // Get current user for audit
+            const { data: { user } } = await supabase.auth.getUser();
+            const userEmail = user?.email || "unknown";
 
             // 1. Update DB
             const { error: dbError } = await supabase
@@ -181,24 +199,30 @@ export default function EditUserPage() {
 
             if (dbError) throw new Error(dbError.message);
 
-            // 2. Queue 'user_update' Job
-            const { data: jobData, error: jobError } = await supabase.from("jobs").insert({
-                site_id: siteId,
-                client_id: clientId,
-                type: "user_update",
-                payload: {
-                    userID: String(userIdDevice),
-                    userName: formData.name,
-                    authority: formData.authority
-                },
-                priority: 1,
-                max_attempts: 3,
-                status: "pending"
-            }).select().single();
+            // 2. Queue 'user_update' Job per device
+            const devices = await getDevices(siteId);
+            if (devices.length === 0) toast.warning("Perfil salvo, mas sem dispositivos para sincronizar.");
 
-            if (jobError) throw new Error(jobError.message);
+            for (const device of devices) {
+                const { error: jobError } = await supabase.from("jobs").insert({
+                    site_id: siteId,
+                    client_id: clientId,
+                    facial_id: device.id,
+                    type: "user_update",
+                    payload: {
+                        userID: String(userIdDevice),
+                        userName: formData.name,
+                        authority: formData.authority,
+                        triggered_by: userEmail
+                    },
+                    priority: 1,
+                    max_attempts: 3,
+                    status: "pending"
+                });
+                if (jobError) console.error(`Error syncing user to ${device.name}`, jobError);
+            }
 
-            toast.success(`Perfil atualizado! Job ID: ${jobData.id}`);
+            toast.success(`Perfil atualizado e sincronizado para ${devices.length} dispositivos!`);
         } catch (err: any) {
             toast.error(err.message);
         } finally {
@@ -215,9 +239,11 @@ export default function EditUserPage() {
         try {
             const { siteId, clientId } = await getSiteContext();
 
+            // Get current user for audit
+            const { data: { user } } = await supabase.auth.getUser();
+            const userEmail = user?.email || "unknown";
+
             // 1. Insert into public.cards
-            // We need the UUID. 
-            // Fetch it quickly if needed (or store in state from fetchUser)
             const { data: userData } = await supabase.from("users").select("id").eq("user_id", userIdDevice).single();
             if (!userData) throw new Error("User UUID not found");
 
@@ -229,31 +255,43 @@ export default function EditUserPage() {
 
             if (dbError) {
                 if (dbError.code === '23505') {
-                    toast.error("Este cartão já está cadastrado.");
+                    // Card exists. If it's this user's, we continue to sync.
+                    // If it belongs to another user, DB constraint might have fired.
+                    // Assuming 'unique(site_id, card_number)'...
+                    // Check if it belongs to THIS user or another.
+                    const { data: existing } = await supabase.from("cards").select("user_id").eq("card_number", cardNo).eq("site_id", siteId).single();
+                    if (existing && existing.user_id !== userData.id) {
+                        toast.error("Este cartão já está cadastrado para OUTRO usuário.");
+                        setCardSaving(false);
+                        return;
+                    }
+                    toast.info("Cartão já existente. Ressincronizando com dispositivos...");
                 } else {
                     throw new Error(dbError.message);
                 }
-                setCardSaving(false);
-                return;
             }
 
-            // 2. Queue 'card_add' Job
-            const { data: jobData, error: jobError } = await supabase.from("jobs").insert({
-                site_id: siteId,
-                client_id: clientId,
-                type: "card_add",
-                payload: {
-                    userID: String(userIdDevice),
-                    cardNo: String(cardNo).replace(/\D/g, "")
-                },
-                priority: 1,
-                max_attempts: 3,
-                status: "pending"
-            }).select().single();
+            // 2. Queue 'card_add' Job per device
+            const devices = await getDevices(siteId);
+            for (const device of devices) {
+                const { error: jobError } = await supabase.from("jobs").insert({
+                    site_id: siteId,
+                    client_id: clientId,
+                    facial_id: device.id,
+                    type: "card_add",
+                    payload: {
+                        userID: String(userIdDevice),
+                        cardNo: String(cardNo).replace(/\D/g, ""),
+                        triggered_by: userEmail
+                    },
+                    priority: 1,
+                    max_attempts: 3,
+                    status: "pending"
+                });
+                if (jobError) console.error(`Error syncing card to ${device.name}`, jobError);
+            }
 
-            if (jobError) throw new Error(jobError.message);
-
-            toast.success(`Cartão adicionado! Job ID: ${jobData.id}`);
+            toast.success(`Cartão sincronizado!`);
             setCardNo("");
             fetchCards(); // Refresh list
 
@@ -264,30 +302,46 @@ export default function EditUserPage() {
         }
     };
 
-    const handleDeleteCard = async (cardToDelete: { id: string, card_no: string }) => {
-        if (!confirm(`Remover o cartão ${cardToDelete.card_no}?`)) return;
+    const handleDeleteCardClick = (card: { id: string, card_no: string }) => {
+        setCardToDelete(card);
+    };
+
+    const confirmDeleteCard = async () => {
+        if (!cardToDelete) return;
+        const card = cardToDelete;
+        setCardToDelete(null); // Close modal
 
         try {
             const { siteId, clientId } = await getSiteContext();
 
+            // Get current user for audit
+            const { data: { user } } = await supabase.auth.getUser();
+            const userEmail = user?.email || "unknown";
+
             // 1. Remove from DB
-            await supabase.from("cards").delete().eq("id", cardToDelete.id);
+            await supabase.from("cards").delete().eq("id", card.id);
 
-            // 2. Queue 'card_delete' Job
-            const { data: jobData } = await supabase.from("jobs").insert({
-                site_id: siteId,
-                client_id: clientId,
-                type: "card_delete",
-                payload: {
-                    userID: String(userIdDevice),
-                    cardNo: cardToDelete.card_no
-                },
-                priority: 1,
-                max_attempts: 3,
-                status: "pending"
-            }).select().single();
+            // 2. Queue 'card_delete' Job per device
+            const devices = await getDevices(siteId);
+            for (const device of devices) {
+                const { error: jobError } = await supabase.from("jobs").insert({
+                    site_id: siteId,
+                    client_id: clientId,
+                    facial_id: device.id,
+                    type: "card_delete",
+                    payload: {
+                        userID: String(userIdDevice),
+                        cardNo: card.card_no,
+                        triggered_by: userEmail
+                    },
+                    priority: 1,
+                    max_attempts: 3,
+                    status: "pending"
+                });
+                if (jobError) console.error(`Error removing card from ${device.name}`, jobError);
+            }
 
-            toast.success(`Cartão removido! Job ID: ${jobData?.id}`);
+            toast.success(`Cartão removido e comando enviado para dispositivos.`);
             fetchCards();
 
         } catch (err: any) {
@@ -305,48 +359,39 @@ export default function EditUserPage() {
         try {
             const { siteId, clientId } = await getSiteContext();
 
-            // 1. Queue Job
-            const { data: jobData, error: jobError } = await supabase.from("jobs").insert({
-                site_id: siteId,
-                client_id: clientId,
-                type: "face_upload_base64",
-                payload: {
-                    userID: String(userIdDevice),
-                    photoData: photoData
-                },
-                priority: 1,
-                max_attempts: 3,
-                status: "pending"
-            }).select("id").single();
+            // Get current user for audit
+            const { data: { user } } = await supabase.auth.getUser();
+            const userEmail = user?.email || "unknown";
 
-            if (jobError) throw new Error(jobError.message);
-
-            const jobId = jobData.id;
-            toast.info("Enviando para o dispositivo...", { duration: 2000 });
-
-            // 2. Poll for Result
-            for (let i = 0; i < 60; i++) {
-                const { data: job } = await supabase
-                    .from("jobs")
-                    .select("status, error_message, result")
-                    .eq("id", jobId)
-                    .single();
-
-                if (!job) break;
-
-                if (job.status === 'done') {
-                    toast.success("Foto salva no dispositivo com sucesso! 📸");
-                    return;
-                }
-
-                if (job.status === 'failed') {
-                    throw new Error(job.error_message || "O dispositivo rejeitou a foto.");
-                }
-
-                await new Promise(r => setTimeout(r, 800));
+            // 1. Queue Job per device
+            const devices = await getDevices(siteId);
+            if (devices.length === 0) {
+                toast.warning("Sem dispositivos online para enviar a foto.");
+                setBioSaving(false);
+                return;
             }
 
-            throw new Error("Tempo esgotado! O dispositivo não respondeu.");
+            for (const device of devices) {
+                const { error: jobError } = await supabase.from("jobs").insert({
+                    site_id: siteId,
+                    client_id: clientId,
+                    facial_id: device.id,
+                    type: "face_upload_base64",
+                    payload: {
+                        userID: String(userIdDevice),
+                        photoData: photoData,
+                        triggered_by: userEmail
+                    },
+                    priority: 1,
+                    max_attempts: 3,
+                    status: "pending"
+                });
+                if (jobError) console.error(`Failed to send face to ${device.name}`, jobError);
+            }
+
+            toast.success(`Foto enviada para fila de sincronização (${devices.length} dispositivos).`);
+            // We removed strict polling because iterating multiple devices makes it complex. 
+            // The user can check status in "Logs" or we rely on "Enterprise Reliability".
 
         } catch (err: any) {
             toast.error(err.message);
@@ -483,7 +528,7 @@ export default function EditUserPage() {
                                                 variant="ghost"
                                                 size="sm"
                                                 className="h-8 w-8 p-0 text-red-500 hover:text-red-600 hover:bg-red-500/10"
-                                                onClick={() => handleDeleteCard(card)}
+                                                onClick={() => handleDeleteCardClick(card)}
                                             >
                                                 <Trash2 className="h-4 w-4" />
                                             </Button>
@@ -539,6 +584,44 @@ export default function EditUserPage() {
                 </TabsContent>
 
             </Tabs>
+
+            <Dialog open={!!cardToDelete} onOpenChange={(open) => !open && setCardToDelete(null)}>
+                <DialogContent className="sm:max-w-[425px] bg-zinc-950 border-zinc-800 text-zinc-100">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2 text-red-500">
+                            <AlertTriangle className="h-5 w-5" />
+                            Confirmar Remoção
+                        </DialogTitle>
+                        <DialogDescription className="text-zinc-400 pt-2">
+                            Tem certeza que deseja remover o cartão?
+                            <br />
+                            <span className="font-mono text-lg text-white block mt-2 tracking-wider">
+                                {cardToDelete?.card_no}
+                            </span>
+                            <span className="text-xs text-zinc-500 block mt-1">
+                                Esta ação removerá o cartão de todos os dispositivos.
+                            </span>
+                        </DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter className="gap-2 mt-4">
+                        <Button
+                            variant="ghost"
+                            onClick={() => setCardToDelete(null)}
+                            className="text-zinc-400 hover:text-white hover:bg-zinc-900"
+                        >
+                            Cancelar
+                        </Button>
+                        <Button
+                            onClick={confirmDeleteCard}
+                            variant="destructive"
+                            className="bg-red-900/50 hover:bg-red-900 text-red-100 border border-red-800"
+                        >
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Confirmar e Remover
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

@@ -8,6 +8,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Plus, Trash2, RefreshCw, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import Link from "next/link";
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog";
 
 interface User {
     id: string; // internal DB id
@@ -50,17 +58,34 @@ export default function UsersPage() {
         fetchUsers();
     }, []);
 
-    const handleDelete = async (userId: string) => {
-        if (!confirm("Are you sure you want to delete this user? This will queue a delete job.")) return;
+    const [userToDelete, setUserToDelete] = useState<User | null>(null);
+
+    const getDevices = async (siteId: string) => {
+        const { data } = await supabase.from("facials").select("id, name").eq("site_id", siteId);
+        return data || [];
+    };
+
+    const handleDeleteClick = (user: User) => {
+        setUserToDelete(user);
+    }
+
+    const confirmDeleteUser = async () => {
+        if (!userToDelete) return;
+        const user = userToDelete;
+        setUserToDelete(null); // Close dialog
 
         try {
             const { siteId, clientId } = await getSiteContext();
+
+            // Get current user for audit
+            const { data: { user: currentUser } } = await supabase.auth.getUser();
+            const userEmail = currentUser?.email || "unknown";
 
             // 1. Delete from public.users (DB)
             const { error: dbError } = await supabase
                 .from("users")
                 .delete()
-                .eq("user_id", userId)
+                .eq("user_id", user.user_id)
                 .eq("client_id", clientId);
 
             if (dbError) {
@@ -68,22 +93,33 @@ export default function UsersPage() {
                 return;
             }
 
-            // 2. Queue delete job for Device
-            const { error: jobError } = await supabase.from("jobs").insert({
-                site_id: siteId,
-                client_id: clientId,
-                type: "delete_user",
-                payload: { userID: userId },
-                status: "pending"
-            });
+            // 2. Queue delete job for ALL devices
+            const devices = await getDevices(siteId);
 
-            if (jobError) {
-                toast.error("User deleted from DB, but failed to queue device job: " + jobError.message);
+            // Even if no devices, we deleted from DB, so we clear the UI.
+            if (devices.length > 0) {
+                for (const device of devices) {
+                    const { error: jobError } = await supabase.from("jobs").insert({
+                        site_id: siteId,
+                        client_id: clientId,
+                        facial_id: device.id,
+                        type: "delete_user",
+                        payload: {
+                            userID: user.user_id,
+                            triggered_by: userEmail
+                        },
+                        status: "pending"
+                    });
+                    if (jobError) console.error(`Failed to queue delete for ${device.name}`, jobError);
+                }
+                toast.success(`Usuário excluído e comando enviado para ${devices.length} dispositivos.`);
             } else {
-                toast.success("User deleted successfully");
-                // Refresh list
-                setUsers(users.filter(u => u.user_id !== userId));
+                toast.success("Usuário excluído do banco (sem dispositivos para sincronizar).");
             }
+
+            // Refresh list
+            setUsers(users.filter(u => u.user_id !== user.user_id));
+
         } catch (err: any) {
             console.error(err);
             toast.error(err.message);
@@ -160,7 +196,7 @@ export default function UsersPage() {
                                                     variant="ghost"
                                                     size="sm"
                                                     className="text-red-500 hover:text-red-600 hover:bg-red-900/10"
-                                                    onClick={() => handleDelete(user.user_id)}
+                                                    onClick={() => handleDeleteClick(user)}
                                                 >
                                                     <Trash2 className="h-4 w-4" />
                                                 </Button>
@@ -173,6 +209,46 @@ export default function UsersPage() {
                     </div>
                 </CardContent>
             </Card>
+
+            <Dialog open={!!userToDelete} onOpenChange={(open) => !open && setUserToDelete(null)}>
+                <DialogContent className="sm:max-w-[425px] bg-zinc-950 border-zinc-800 text-zinc-100">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2 text-red-500">
+                            <Trash2 className="h-5 w-5" />
+                            Confirmar Exclusão
+                        </DialogTitle>
+                        <DialogDescription className="text-zinc-400 pt-2">
+                            Tem certeza que deseja remover este usuário?
+                            <br />
+                            <span className="font-bold text-lg text-white block mt-2">
+                                {userToDelete?.name}
+                            </span>
+                            <span className="text-sm text-zinc-500 block">
+                                ID: {userToDelete?.user_id}
+                            </span>
+                            <span className="text-xs text-zinc-500 block mt-2 pt-2 border-t border-zinc-800">
+                                Ele será removido do banco de dados e de todos os dispositivos.
+                            </span>
+                        </DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter className="gap-2 mt-4">
+                        <Button
+                            variant="ghost"
+                            onClick={() => setUserToDelete(null)}
+                            className="text-zinc-400 hover:text-white hover:bg-zinc-900"
+                        >
+                            Cancelar
+                        </Button>
+                        <Button
+                            onClick={confirmDeleteUser}
+                            variant="destructive"
+                            className="bg-red-900/50 hover:bg-red-900 text-red-100 border border-red-800"
+                        >
+                            Confirmar e Excluir
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

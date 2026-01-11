@@ -115,7 +115,11 @@ export function UnitFormDialog({ open, onOpenChange, unitToEdit, onSuccess }: Un
             onOpenChange(false);
         } catch (err: any) {
             console.error(err);
-            toast.error(err.message);
+            if (err.code === '23505' || err.message?.includes('violates unique constraint')) {
+                toast.error("Unidade já cadastrada! Verifique o Bloco e Número.");
+            } else {
+                toast.error(err.message || "Erro ao salvar unidade");
+            }
         } finally {
             setLoading(false);
         }

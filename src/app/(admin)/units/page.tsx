@@ -10,6 +10,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { UnitFormDialog } from "@/components/UnitFormDialog";
 import { toast } from "sonner";
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog";
 
 interface Unit {
     id: string;
@@ -65,8 +73,16 @@ export default function UnitsPage() {
         fetchUnits();
     }, [fetchUnits]);
 
-    const handleDelete = async (id: string) => {
-        if (!confirm("Tem certeza que deseja remover esta unidade?")) return;
+    const [unitToDelete, setUnitToDelete] = useState<Unit | null>(null);
+
+    const handleDeleteClick = (unit: Unit) => {
+        setUnitToDelete(unit);
+    };
+
+    const confirmDelete = async () => {
+        if (!unitToDelete) return;
+        const id = unitToDelete.id;
+        setUnitToDelete(null);
 
         try {
             const { error } = await supabase.from("units").delete().eq("id", id);
@@ -170,7 +186,7 @@ export default function UnitsPage() {
                                                 <Button variant="ghost" size="sm" onClick={() => handleEdit(unit)}>
                                                     <Pencil className="h-4 w-4 text-blue-500" />
                                                 </Button>
-                                                <Button variant="ghost" size="sm" onClick={() => handleDelete(unit.id)}>
+                                                <Button variant="ghost" size="sm" onClick={() => handleDeleteClick(unit)}>
                                                     <Trash2 className="h-4 w-4 text-red-500" />
                                                 </Button>
                                             </div>
@@ -189,6 +205,43 @@ export default function UnitsPage() {
                 unitToEdit={editingUnit}
                 onSuccess={fetchUnits}
             />
+
+            <Dialog open={!!unitToDelete} onOpenChange={(open) => !open && setUnitToDelete(null)}>
+                <DialogContent className="sm:max-w-[425px] bg-zinc-950 border-zinc-800 text-zinc-100">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2 text-red-500">
+                            <Trash2 className="h-5 w-5" />
+                            Confirmar Exclusão
+                        </DialogTitle>
+                        <DialogDescription className="text-zinc-400 pt-2">
+                            Tem certeza que deseja remover esta unidade?
+                            <br />
+                            <span className="font-bold text-lg text-white block mt-2">
+                                {unitToDelete?.block} - {unitToDelete?.name}
+                            </span>
+                            <span className="text-xs text-zinc-500 block mt-1">
+                                Isso não remove o usuário associado, apenas o registro do apartamento.
+                            </span>
+                        </DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter className="gap-2 mt-4">
+                        <Button
+                            variant="ghost"
+                            onClick={() => setUnitToDelete(null)}
+                            className="text-zinc-400 hover:text-white hover:bg-zinc-900"
+                        >
+                            Cancelar
+                        </Button>
+                        <Button
+                            onClick={confirmDelete}
+                            variant="destructive"
+                            className="bg-red-900/50 hover:bg-red-900 text-red-100 border border-red-800"
+                        >
+                            Confirmar e Excluir
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }
