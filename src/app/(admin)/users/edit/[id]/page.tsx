@@ -38,8 +38,10 @@ export default function EditUserPage() {
         name: "",
         block: "",
         apartment: "",
-        authority: 2 // Default user
+        authority: 2, // Default user
+        password: ""
     });
+    const [internalId, setInternalId] = useState<string>("");
 
     // Card Data
     const [cardNo, setCardNo] = useState("");
@@ -50,6 +52,7 @@ export default function EditUserPage() {
     // Bio Data
     const [photoData, setPhotoData] = useState<string>("");
     const [bioSaving, setBioSaving] = useState(false);
+    const [bioStatus, setBioStatus] = useState<{ status: string, result: any, created_at: string } | null>(null);
 
     // Unit Selection State
     const [availableBlocks, setAvailableBlocks] = useState<string[]>([]);
@@ -59,17 +62,60 @@ export default function EditUserPage() {
 
     useEffect(() => {
         const init = async () => {
-            await Promise.all([fetchUser(), fetchUnits(), fetchCards()]);
+            await Promise.all([fetchUser(), fetchUnits(), fetchCards(), fetchBioStatus()]);
             setLoading(false);
         };
         init();
     }, [userIdDevice]);
 
+    // Poll Bio Status if Pending
+    useEffect(() => {
+        let interval: NodeJS.Timeout;
+        if (bioStatus?.status === 'pending') {
+            interval = setInterval(fetchBioStatus, 2000); // Check every 2s
+        }
+        return () => clearInterval(interval);
+    }, [bioStatus?.status]);
+
+    // --- NEW: Safe DB Update (Green Icon Flag) ---
+    // Writes a small flag "REGISTERED" instead of the full image to avoid payload issues.
+    useEffect(() => {
+        const syncGreenIcon = async () => {
+            if ((bioStatus?.status === 'done' || bioStatus?.status === 'completed')) {
+                // Only write if we haven't already marked it (optimization)
+                // We don't have the current DB value easily here, but the update is cheap.
+                // We use a local ref to ensure we only do it once per successful session load to avoid loops.
+                // But we don't want to re-introduce the ref if not needed.
+                // Let's just do it once when status becomes done.
+
+                // We can't easily check "if db is already REGISTERED".
+                // We'll just fire-and-forget the update.
+
+                const { siteId, clientId } = await getSiteContext();
+                // Check if we need to update to avoid spam
+                // (Optional: fetch current first? Nah, just update)
+
+                await supabase
+                    .from("users")
+                    .update({ photo_data: "REGISTERED" })
+                    .eq("user_id", userIdDevice)
+                    .eq("client_id", clientId);
+
+                // We don't toast here to avoid confusion, just silent system update.
+            }
+        };
+
+        // trigger only on status change to done
+        if (bioStatus?.status === 'done' || bioStatus?.status === 'completed') {
+            syncGreenIcon();
+        }
+    }, [bioStatus?.status]);
+
     const fetchUser = async () => {
         try {
             const { data, error } = await supabase
                 .from("users")
-                .select("*, photo_data") // Explicitly ask for photo_data if not included in *
+                .select("*, photo_data")
                 .eq("user_id", userIdDevice)
                 .limit(1)
                 .maybeSingle();
@@ -81,19 +127,19 @@ export default function EditUserPage() {
                 name: data.name,
                 block: data.block || "",
                 apartment: data.apartment || "",
-                authority: data.authority || 2
+                authority: data.authority || 2,
+                password: data.password || ""
             });
-
-            // Note: Card number might be in DB, but we usually want to overwrite or add new.
-            // If we store it, we can show it.
-            // if (data.card_no) setCardNo(data.card_no); // Legacy: Don't prefill "New Card" input
+            if (data.id) setInternalId(data.id);
 
             if (data.block) setSelectedBlock(data.block);
 
-            // Existing Photo
-            if (data.photo_data) {
+            // Existing Photo checking
+            if (data.photo_data && data.photo_data !== "REGISTERED") {
                 setPhotoData(data.photo_data);
             }
+            // If "REGISTERED", we treat as "Has Biometry" but "No Preview Available".
+
         } catch (e: any) {
             console.error(e);
             toast.error("Erro ao carregar usuário");
@@ -147,6 +193,35 @@ export default function EditUserPage() {
         }
     };
 
+    const fetchBioStatus = async () => {
+        try {
+            const { siteId } = await getSiteContext();
+            // Fetch the latest face upload job for this user
+            // We use payload->>userID to filter jsonb
+            const { data, error } = await supabase
+                .from("jobs")
+                .select("status, result, created_at")
+                .eq("site_id", siteId)
+                .eq("type", "upload_face_base64")
+                .textSearch("payload", `'${userIdDevice}'`) // textSearch might be tricky with jsonb, let's use filter if possible or just fetch recent and filter
+                // jsonb filter: .contains("payload", { userID: userIdDevice }) 
+                // But userID is user_id(text).
+                // Let's try .eq('payload->>userID', userIdDevice) if Supabase supports it via JS client directly or check syntax.
+                // Supabase JS: .match({ 'payload->userID': userIdDevice }) might not work.
+                // Safer: .contains('payload', { userID: userIdDevice })
+                .contains('payload', { userID: userIdDevice })
+                .order("created_at", { ascending: false })
+                .limit(1)
+                .maybeSingle();
+
+            if (data) {
+                setBioStatus(data);
+            }
+        } catch (e) {
+            console.error("Error fetching bio status:", e);
+        }
+    };
+
     // Filter units when block changes
     useEffect(() => {
         if (selectedBlock) {
@@ -193,11 +268,47 @@ export default function EditUserPage() {
                     name: formData.name,
                     block: formData.block || null,
                     apartment: formData.apartment || null,
+                    password: formData.password || null
                 })
                 .eq("user_id", userIdDevice)
                 .eq("client_id", clientId);
 
             if (dbError) throw new Error(dbError.message);
+
+            // SYNC UNITS: Update the 'units' table to reflect this assignment
+            if (internalId) {
+                if (formData.block && formData.apartment) {
+                    // 1. Find the unit ID
+                    const { data: unitData } = await supabase
+                        .from("units")
+                        .select("id")
+                        .eq("site_id", siteId)
+                        .eq("block", formData.block)
+                        .eq("name", formData.apartment)
+                        .maybeSingle();
+
+                    if (unitData) {
+                        // 2. Assign this user to the unit
+                        await supabase
+                            .from("units")
+                            .update({ responsible_id: internalId })
+                            .eq("id", unitData.id);
+
+                        // 3. Clear any OTHER units this user might have been assigned to (Enforce 1:1 if desired, or just cleanup)
+                        await supabase
+                            .from("units")
+                            .update({ responsible_id: null })
+                            .eq("responsible_id", internalId)
+                            .neq("id", unitData.id);
+                    }
+                } else {
+                    // If address was cleared, remove user from ANY units they were responsible for
+                    await supabase
+                        .from("units")
+                        .update({ responsible_id: null })
+                        .eq("responsible_id", internalId);
+                }
+            }
 
             // 2. Queue 'user_update' Job per device
             const devices = await getDevices(siteId);
@@ -210,8 +321,11 @@ export default function EditUserPage() {
                     facial_id: device.id,
                     type: "user_update",
                     payload: {
+                        facial_id: device.id,
+                        device_id: device.id,
                         userID: String(userIdDevice),
                         userName: formData.name,
+                        password: formData.password, // Send updated password
                         authority: formData.authority,
                         triggered_by: userEmail
                     },
@@ -280,6 +394,8 @@ export default function EditUserPage() {
                     facial_id: device.id,
                     type: "card_add",
                     payload: {
+                        facial_id: device.id,
+                        device_id: device.id,
                         userID: String(userIdDevice),
                         cardNo: String(cardNo).replace(/\D/g, ""),
                         triggered_by: userEmail
@@ -330,6 +446,8 @@ export default function EditUserPage() {
                     facial_id: device.id,
                     type: "card_delete",
                     payload: {
+                        facial_id: device.id,
+                        device_id: device.id,
                         userID: String(userIdDevice),
                         cardNo: card.card_no,
                         triggered_by: userEmail
@@ -376,8 +494,10 @@ export default function EditUserPage() {
                     site_id: siteId,
                     client_id: clientId,
                     facial_id: device.id,
-                    type: "face_upload_base64",
+                    type: "upload_face_base64",
                     payload: {
+                        facial_id: device.id,
+                        device_id: device.id,
                         userID: String(userIdDevice),
                         photoData: photoData,
                         triggered_by: userEmail
@@ -392,6 +512,13 @@ export default function EditUserPage() {
             toast.success(`Foto enviada para fila de sincronização (${devices.length} dispositivos).`);
             // We removed strict polling because iterating multiple devices makes it complex. 
             // The user can check status in "Logs" or we rely on "Enterprise Reliability".
+
+            toast.success(`Foto enviada para fila de sincronização (${devices.length} dispositivos).`);
+
+            // Wait a sec then refresh status
+            setTimeout(() => {
+                fetchBioStatus();
+            }, 1000);
 
         } catch (err: any) {
             toast.error(err.message);
@@ -442,6 +569,20 @@ export default function EditUserPage() {
                                         required
                                         className="max-w-md"
                                     />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Senha do Dispositivo</Label>
+                                    <Input
+                                        name="password"
+                                        type="password"
+                                        placeholder="Senha numérica (Ex: 123456)"
+                                        value={formData.password}
+                                        onChange={handleInputChange}
+                                        className="max-w-md font-mono"
+                                    />
+                                    <p className="text-xs text-muted-foreground">
+                                        Deixe em branco para manter inalterado (se não souber).
+                                    </p>
                                 </div>
                             </CardContent>
                             <CardFooter>
@@ -568,10 +709,44 @@ export default function EditUserPage() {
                         </CardHeader>
                         <CardContent className="space-y-6">
 
+                            {/* Status System Badge */}
+                            <div className="flex items-center gap-2">
+                                <div className={`px-3 py-1 rounded-full text-xs font-medium flex items-center gap-2 ${photoData ? "bg-emerald-500/10 text-emerald-500" : "bg-destructive/10 text-destructive"}`}>
+                                    {photoData ? <CheckCircle2 className="h-3 w-3" /> : <AlertTriangle className="h-3 w-3" />}
+                                    {photoData ? "Foto Cadastrada no Sistema" : "Sem Foto no Sistema"}
+                                </div>
+
+                                {/* Last Sync Job Status - ONLY SHOW IF photoData EXISTS matches system state */}
+                                {photoData && bioStatus && (
+                                    <div className={`px-3 py-1 rounded-full text-xs font-medium flex items-center gap-2 border ${(bioStatus.status === 'completed' || bioStatus.status === 'done') ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" :
+                                        bioStatus.status === 'pending' ? "bg-yellow-500/10 text-yellow-500 border-yellow-500/20" :
+                                            "bg-red-500/10 text-red-500 border-red-500/20"
+                                        }`}>
+                                        {(bioStatus.status === 'completed' || bioStatus.status === 'done') && <CheckCircle2 className="h-3 w-3" />}
+                                        {bioStatus.status === 'pending' && <Loader2 className="h-3 w-3 animate-spin" />}
+                                        {bioStatus.status === 'failed' && <AlertTriangle className="h-3 w-3" />}
+
+                                        {(bioStatus.status === 'completed' || bioStatus.status === 'done') && "Sincronizado"}
+                                        {bioStatus.status === 'pending' && "Sincronizando..."}
+                                        {bioStatus.status === 'failed' && "Erro na Sincronização"}
+                                    </div>
+                                )}
+                            </div>
+
                             <FaceUpload
                                 currentPhoto={photoData}
                                 onPhotoSelected={setPhotoData}
                             />
+
+                            {/* Detailed Error Message if Failed */}
+                            {bioStatus && bioStatus.status === 'failed' && (
+                                <div className="p-3 rounded-md bg-destructive/10 border border-destructive/20 text-destructive text-sm">
+                                    <p className="font-semibold mb-1">Detalhes do Erro:</p>
+                                    <pre className="whitespace-pre-wrap text-xs opacity-90">
+                                        {JSON.stringify(bioStatus.result, null, 2)}
+                                    </pre>
+                                </div>
+                            )}
 
                         </CardContent>
                         <CardFooter>

@@ -162,170 +162,214 @@ export function DeviceConfigDialog({ device, trigger, onUpdate }: DeviceConfigDi
         }
     };
 
-    const handleDelete = async () => {
-        if (!device?.id || !confirm("Tem certeza que deseja excluir este dispositivo?")) return;
+    const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+
+    const handleDeleteClick = () => {
+        setDeleteConfirmOpen(true);
+    };
+
+    const confirmDelete = async () => {
+        if (!device?.id) return;
         setLoading(true);
         try {
+            // Attempt to delete (Cascade should handle children if SQL run, otherwise we might error)
             const { error } = await supabase.from("facials").delete().eq("id", device.id);
-            if (error) throw error;
+
+            if (error) {
+                // Friendly error analysis
+                if (error.code === '23503') { // ForeignKey Violation
+                    throw new Error("Não é possível excluir: Existem registros (logs/jobs) vinculados. Execute o script 'fix_delete_cascade.sql' no banco.");
+                }
+                throw error;
+            }
+
+            setDeleteConfirmOpen(false);
             setOpen(false);
             onUpdate();
             toast.success("Dispositivo removido.");
         } catch (e: any) {
-            toast.error(e.message);
+            console.error(e);
+            toast.error(e.message || "Erro ao excluir dispositivo");
         } finally {
             setLoading(false);
         }
     };
 
     return (
-        <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>
-                {trigger || (
-                    <Button variant="ghost" size="icon" className="h-8 w-8">
-                        <Settings className="h-4 w-4" />
-                    </Button>
-                )}
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-[600px]">
-                <DialogHeader>
-                    <DialogTitle>{device ? "Editar Dispositivo" : "Novo Dispositivo"}</DialogTitle>
-                    <DialogDescription>
-                        Configure os detalhes de conexão e autenticação do controlador facial.
-                    </DialogDescription>
-                </DialogHeader>
-
-                <Tabs defaultValue="general" className="w-full">
-                    <TabsList className="grid w-full grid-cols-3">
-                        <TabsTrigger value="general">Geral</TabsTrigger>
-                        <TabsTrigger value="network">Rede & Auth</TabsTrigger>
-                        <TabsTrigger value="monitoring">Monitoramento</TabsTrigger>
-                    </TabsList>
-
-                    {/* GENERAL TAB */}
-                    <TabsContent value="general" className="space-y-4 py-4">
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="space-y-2 col-span-2">
-                                <Label>Nome do Equipamento</Label>
-                                <Input
-                                    placeholder="Ex: Portão Social"
-                                    value={name}
-                                    onChange={(e) => setName(e.target.value)}
-                                />
-                            </div>
-                            <div className="space-y-2 col-span-2">
-                                <Label>Descrição / Localização</Label>
-                                <Input
-                                    placeholder="Ex: Entrada principal do Bloco A"
-                                    value={location}
-                                    onChange={(e) => setLocation(e.target.value)}
-                                />
-                            </div>
-                        </div>
-                    </TabsContent>
-
-                    {/* NETWORK TAB */}
-                    <TabsContent value="network" className="space-y-4 py-4">
-                        <div className="grid grid-cols-12 gap-4">
-                            <div className="col-span-8 space-y-2">
-                                <Label>Endereço IP / Host</Label>
-                                <Input placeholder="192.168.1.10" value={ip} onChange={(e) => setIp(e.target.value)} />
-                            </div>
-                            <div className="col-span-4 space-y-2">
-                                <Label>Porta</Label>
-                                <Input type="number" value={port} onChange={(e) => setPort(e.target.value)} />
-                            </div>
-
-                            <div className="col-span-6 space-y-2">
-                                <Label>Protocolo</Label>
-                                <Select value={protocol} onValueChange={setProtocol}>
-                                    <SelectTrigger>
-                                        <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="isapi">Intelbras / Hikvision (ISAPI)</SelectItem>
-                                        <SelectItem value="rpc">Dahua (RPC)</SelectItem>
-                                        <SelectItem value="http">Genérico (HTTP)</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            </div>
-
-                            <div className="col-span-6 space-y-2">
-                                <Label>Canal / Porta Index</Label>
-                                <Input type="number" value={channel} onChange={(e) => setChannel(e.target.value)} placeholder="1" />
-                            </div>
-
-                            <div className="col-span-12 border-t pt-4 mt-2">
-                                <Label className="text-base font-semibold">Credenciais do Dispositivo</Label>
-                                <p className="text-xs text-muted-foreground mb-4">Necessário para comandos remotos (abrir porta, sync usuários).</p>
-                            </div>
-
-                            <div className="col-span-6 space-y-2">
-                                <Label>Usuário</Label>
-                                <Input placeholder="admin" value={username} onChange={(e) => setUsername(e.target.value)} />
-                            </div>
-                            <div className="col-span-6 space-y-2">
-                                <Label>Senha</Label>
-                                <div className="relative">
-                                    <Input
-                                        type={showPassword ? "text" : "password"}
-                                        placeholder="••••••"
-                                        value={password}
-                                        onChange={(e) => setPassword(e.target.value)}
-                                        className="pr-10"
-                                    />
-                                    <button
-                                        type="button"
-                                        onClick={() => setShowPassword(!showPassword)}
-                                        className="absolute right-3 top-2.5 text-muted-foreground hover:text-foreground"
-                                    >
-                                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </TabsContent>
-
-                    {/* MONITORING TAB */}
-                    <TabsContent value="monitoring" className="space-y-4 py-4">
-                        <div className="flex items-center justify-between space-x-2 border p-4 rounded-md">
-                            <div className="flex flex-col space-y-1">
-                                <Label className="text-base">Health Check Ativo</Label>
-                                <span className="text-xs text-muted-foreground">
-                                    Verifica periodicamente se o dispositivo está online via Ping/API.
-                                </span>
-                            </div>
-                            <Switch checked={keepAliveEnabled} onCheckedChange={setKeepAliveEnabled} />
-                        </div>
-
-                        {keepAliveEnabled && (
-                            <div className="space-y-2">
-                                <Label>Intervalo de Verificação (minutos)</Label>
-                                <Input
-                                    type="number"
-                                    value={probingInterval}
-                                    onChange={(e) => setProbingInterval(e.target.value)}
-                                    min="1"
-                                />
-                            </div>
-                        )}
-                    </TabsContent>
-                </Tabs>
-
-                <DialogFooter className="gap-2 sm:gap-0">
-                    {device?.id && (
-                        <Button variant="destructive" size="icon" onClick={handleDelete} disabled={loading}>
-                            <Trash2 className="h-4 w-4" />
+        <>
+            <Dialog open={open} onOpenChange={setOpen}>
+                <DialogTrigger asChild>
+                    {trigger || (
+                        <Button variant="ghost" size="icon" className="h-8 w-8">
+                            <Settings className="h-4 w-4" />
                         </Button>
                     )}
-                    <div className="flex-1" />
-                    <Button variant="outline" onClick={() => setOpen(false)}>Cancelar</Button>
-                    <Button onClick={handleSave} disabled={loading} className="gap-2">
-                        <Save className="h-4 w-4" />
-                        {loading ? "Salvando..." : "Salvar Configurações"}
-                    </Button>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-[600px]">
+                    <DialogHeader>
+                        <DialogTitle>{device ? "Editar Dispositivo" : "Novo Dispositivo"}</DialogTitle>
+                        <DialogDescription>
+                            Configure os detalhes de conexão e autenticação do controlador facial.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <Tabs defaultValue="general" className="w-full">
+                        <TabsList className="grid w-full grid-cols-3">
+                            <TabsTrigger value="general">Geral</TabsTrigger>
+                            <TabsTrigger value="network">Rede & Auth</TabsTrigger>
+                            <TabsTrigger value="monitoring">Monitoramento</TabsTrigger>
+                        </TabsList>
+
+                        {/* GENERAL TAB */}
+                        <TabsContent value="general" className="space-y-4 py-4">
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2 col-span-2">
+                                    <Label>Nome do Equipamento</Label>
+                                    <Input
+                                        placeholder="Ex: Portão Social"
+                                        value={name}
+                                        onChange={(e) => setName(e.target.value)}
+                                    />
+                                </div>
+                                <div className="space-y-2 col-span-2">
+                                    <Label>Descrição / Localização</Label>
+                                    <Input
+                                        placeholder="Ex: Entrada principal do Bloco A"
+                                        value={location}
+                                        onChange={(e) => setLocation(e.target.value)}
+                                    />
+                                </div>
+                            </div>
+                        </TabsContent>
+
+                        {/* NETWORK TAB */}
+                        <TabsContent value="network" className="space-y-4 py-4">
+                            <div className="grid grid-cols-12 gap-4">
+                                <div className="col-span-8 space-y-2">
+                                    <Label>Endereço IP / Host</Label>
+                                    <Input placeholder="192.168.1.10" value={ip} onChange={(e) => setIp(e.target.value)} />
+                                </div>
+                                <div className="col-span-4 space-y-2">
+                                    <Label>Porta</Label>
+                                    <Input type="number" value={port} onChange={(e) => setPort(e.target.value)} />
+                                </div>
+
+                                <div className="col-span-6 space-y-2">
+                                    <Label>Protocolo</Label>
+                                    <Select value={protocol} onValueChange={setProtocol}>
+                                        <SelectTrigger>
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="isapi">Intelbras / Hikvision (ISAPI)</SelectItem>
+                                            <SelectItem value="rpc">Dahua (RPC)</SelectItem>
+                                            <SelectItem value="http">Genérico (HTTP)</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+
+                                <div className="col-span-6 space-y-2">
+                                    <Label>Canal / Porta Index</Label>
+                                    <Input type="number" value={channel} onChange={(e) => setChannel(e.target.value)} placeholder="1" />
+                                </div>
+
+                                <div className="col-span-12 border-t pt-4 mt-2">
+                                    <Label className="text-base font-semibold">Credenciais do Dispositivo</Label>
+                                    <p className="text-xs text-muted-foreground mb-4">Necessário para comandos remotos (abrir porta, sync usuários).</p>
+                                </div>
+
+                                <div className="col-span-6 space-y-2">
+                                    <Label>Usuário</Label>
+                                    <Input placeholder="admin" value={username} onChange={(e) => setUsername(e.target.value)} />
+                                </div>
+                                <div className="col-span-6 space-y-2">
+                                    <Label>Senha</Label>
+                                    <div className="relative">
+                                        <Input
+                                            type={showPassword ? "text" : "password"}
+                                            placeholder="••••••"
+                                            value={password}
+                                            onChange={(e) => setPassword(e.target.value)}
+                                            className="pr-10"
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowPassword(!showPassword)}
+                                            className="absolute right-3 top-2.5 text-muted-foreground hover:text-foreground"
+                                        >
+                                            {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </TabsContent>
+
+                        {/* MONITORING TAB */}
+                        <TabsContent value="monitoring" className="space-y-4 py-4">
+                            <div className="flex items-center justify-between space-x-2 border p-4 rounded-md">
+                                <div className="flex flex-col space-y-1">
+                                    <Label className="text-base">Health Check Ativo</Label>
+                                    <span className="text-xs text-muted-foreground">
+                                        Verifica periodicamente se o dispositivo está online via Ping/API.
+                                    </span>
+                                </div>
+                                <Switch checked={keepAliveEnabled} onCheckedChange={setKeepAliveEnabled} />
+                            </div>
+
+                            {keepAliveEnabled && (
+                                <div className="space-y-2">
+                                    <Label>Intervalo de Verificação (minutos)</Label>
+                                    <Input
+                                        type="number"
+                                        value={probingInterval}
+                                        onChange={(e) => setProbingInterval(e.target.value)}
+                                        min="1"
+                                    />
+                                </div>
+                            )}
+                        </TabsContent>
+                    </Tabs>
+
+                    <DialogFooter className="gap-2 sm:gap-0">
+                        {device?.id && (
+                            <Button variant="destructive" size="icon" onClick={handleDeleteClick} disabled={loading}>
+                                <Trash2 className="h-4 w-4" />
+                            </Button>
+                        )}
+                        <div className="flex-1" />
+                        <Button variant="outline" onClick={() => setOpen(false)}>Cancelar</Button>
+                        <Button onClick={handleSave} disabled={loading} className="gap-2">
+                            <Save className="h-4 w-4" />
+                            {loading ? "Salvando..." : "Salvar Configurações"}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Custom Delete Confirmation Dialog */}
+            <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+                <DialogContent className="sm:max-w-[425px] bg-zinc-950 border-zinc-800 text-zinc-100">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2 text-red-500">
+                            <Trash2 className="h-5 w-5" />
+                            Excluir Dispositivo?
+                        </DialogTitle>
+                        <DialogDescription className="text-zinc-400 pt-2">
+                            Esta ação não pode ser desfeita. Isso excluirá permanentemente o dispositivo e pode afetar logs associados.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="py-2">
+                        <p className="font-semibold text-white">{name}</p>
+                        <p className="text-sm text-zinc-500">{ip}</p>
+                    </div>
+                    <DialogFooter className="gap-2 mt-2">
+                        <Button variant="ghost" onClick={() => setDeleteConfirmOpen(false)}>Cancelar</Button>
+                        <Button variant="destructive" onClick={confirmDelete} disabled={loading}>
+                            {loading ? "Excluindo..." : "Sim, Excluir"}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+        </>
     );
 }

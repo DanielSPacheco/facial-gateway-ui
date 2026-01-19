@@ -100,10 +100,10 @@ export default function LoginPage() {
         <Card className="border-white/10 bg-black/40 backdrop-blur-xl shadow-2xl ring-1 ring-white/5 animate-in slide-in-from-bottom-5 duration-700">
           <CardHeader className="text-center space-y-2">
             <CardTitle className="text-3xl font-bold tracking-tight bg-gradient-to-br from-white to-white/60 bg-clip-text text-transparent">
-              SecureEntry
+              FSA
             </CardTitle>
             <CardDescription className="text-white/50">
-              Secure Access Control System
+              Facial Security Automation
               {tenant && <span className="block text-primary/80 text-xs mt-1 font-mono">Tenant: {tenant}</span>}
             </CardDescription>
           </CardHeader>

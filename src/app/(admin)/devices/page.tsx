@@ -143,14 +143,19 @@ export default function DevicesPage() {
                                         <p className="text-sm text-muted-foreground">{facial.ip} • Canal {facial.channel}</p>
                                     </div>
                                 </div>
-                                <div className="flex items-center gap-2">
+                                <div
+                                    className="flex items-center gap-2 cursor-pointer hover:bg-muted/50 p-2 rounded-md transition-colors"
+                                    onClick={() => window.location.href = `/devices/${facial.id}`}
+                                >
                                     <Badge variant="outline" className="border-green-500/50 text-green-500">
                                         Ativo
                                     </Badge>
-                                    <DeviceConfigDialog
-                                        device={facial}
-                                        onUpdate={fetchData}
-                                    />
+                                    <div onClick={(e) => e.stopPropagation()}>
+                                        <DeviceConfigDialog
+                                            device={facial}
+                                            onUpdate={fetchData}
+                                        />
+                                    </div>
                                 </div>
                             </div>
                         ))}

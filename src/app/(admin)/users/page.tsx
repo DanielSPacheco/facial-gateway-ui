@@ -5,7 +5,7 @@ import { supabase } from "@/lib/supabase/client";
 import { getSiteContext } from "@/lib/site-context";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Plus, Trash2, RefreshCw, Pencil } from "lucide-react";
+import { Plus, Trash2, RefreshCw, Pencil, ScanFace, CreditCard, Lock } from "lucide-react";
 import { toast } from "sonner";
 import Link from "next/link";
 import {
@@ -24,6 +24,9 @@ interface User {
     authority: number;
     block?: string;
     apartment?: string;
+    photo_data?: string;
+    cards?: { id: string }[];
+    password?: string;
 }
 
 export default function UsersPage() {
@@ -32,23 +35,18 @@ export default function UsersPage() {
 
     const fetchUsers = async () => {
         setLoading(true);
-        // Assuming 'users' table exists as per standard schema
+        // Using explicit join if foreign key exists. 
+        // If 'cards' table has 'user_id' referencing 'users.id':
         const { data, error } = await supabase
             .from("users")
-            .select("*")
-            // Filter only residents (role is null or 'resident')
-            // Note: Supabase .or() syntax might be needed if defaults were applied late, but let's try assuming 'resident' is default now.
-            // If role column doesn't exist yet in data, this might fail or ignore.
-            // .eq('role', 'resident') or .is('role', null)
-            // For safety, let's filter purely by NOT being system roles if we can, or just 'resident' if we trust migration.
-            // Let's rely on the plan: filter by resident.
-            // .or('role.eq.resident,role.is.null') // RESIDENT FILTER DISABLED FOR DEBUGGING
+            .select("*, cards(id)") // Fetch simplified cards list
             .order("user_id");
 
         if (error) {
             console.error("Error fetching users:", error);
             toast.error("Erro ao buscar usuários: " + error.message);
         } else {
+            console.log("Users fetched:", data);
             setUsers(data || []);
         }
         setLoading(false);
@@ -105,6 +103,8 @@ export default function UsersPage() {
                         facial_id: device.id,
                         type: "delete_user",
                         payload: {
+                            facial_id: device.id,
+                            device_id: device.id, // Redundancy
                             userID: user.user_id,
                             triggered_by: userEmail
                         },
@@ -158,18 +158,19 @@ export default function UsersPage() {
                                     <th className="p-3 font-medium">Nome</th>
                                     <th className="p-3 font-medium">ID</th>
                                     <th className="p-3 font-medium">Unidade</th>
+                                    <th className="p-3 font-medium text-center">Tipo</th>
                                     <th className="p-3 font-medium text-right">Ações</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {loading && (
                                     <tr>
-                                        <td colSpan={4} className="p-4 text-center text-muted-foreground">Carregando...</td>
+                                        <td colSpan={5} className="p-4 text-center text-muted-foreground">Carregando...</td>
                                     </tr>
                                 )}
                                 {!loading && users.length === 0 && (
                                     <tr>
-                                        <td colSpan={4} className="p-4 text-center text-muted-foreground">Nenhum usuário encontrado.</td>
+                                        <td colSpan={5} className="p-4 text-center text-muted-foreground">Nenhum usuário encontrado.</td>
                                     </tr>
                                 )}
                                 {users.map((user) => (
@@ -184,6 +185,42 @@ export default function UsersPage() {
                                             ) : (
                                                 <span className="text-muted-foreground">-</span>
                                             )}
+                                        </td>
+                                        <td className="p-3">
+                                            <div className="flex items-center justify-center gap-2">
+                                                {/* Facial Icon */}
+                                                {user.photo_data ? (
+                                                    <div title="Biometria Facial Cadastrada">
+                                                        <ScanFace className="h-4 w-4 text-primary" />
+                                                    </div>
+                                                ) : (
+                                                    <div title="Sem Biometria">
+                                                        <ScanFace className="h-4 w-4 text-muted-foreground/20" />
+                                                    </div>
+                                                )}
+
+                                                {/* Card Icon */}
+                                                {user.cards && user.cards.length > 0 ? (
+                                                    <div title={`${user.cards.length} Cartão(ões) Vinculado(s)`}>
+                                                        <CreditCard className="h-4 w-4 text-primary" />
+                                                    </div>
+                                                ) : (
+                                                    <div title="Sem Cartão">
+                                                        <CreditCard className="h-4 w-4 text-muted-foreground/20" />
+                                                    </div>
+                                                )}
+
+                                                {/* Password Icon */}
+                                                {user.password ? (
+                                                    <div title="Senha Cadastrada">
+                                                        <Lock className="h-4 w-4 text-primary" />
+                                                    </div>
+                                                ) : (
+                                                    <div title="Sem Senha">
+                                                        <Lock className="h-4 w-4 text-muted-foreground/20" />
+                                                    </div>
+                                                )}
+                                            </div>
                                         </td>
                                         <td className="p-3 text-right">
                                             <div className="flex justify-end gap-1">

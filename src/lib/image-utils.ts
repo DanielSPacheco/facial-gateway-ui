@@ -1,4 +1,6 @@
 // image-utils.ts - Optimization for facial recognition devices
+// STRICT LIMIT: Total Payload < 14000 bytes.
+// We target Base64 < 12500 chars (approx 9.5KB binary).
 
 export async function fileToCompressedDataUrl(file: File) {
     const imgUrl = URL.createObjectURL(file);
@@ -9,15 +11,11 @@ export async function fileToCompressedDataUrl(file: File) {
         i.src = imgUrl;
     });
 
-    // Aggressive scaling
     let w = img.width;
     let h = img.height;
 
-    // Constraint: Firmware request limit implies a very small payload.
-    // Target Base64 length < 12,500 chars to ensure successful transmission.
-    // Starting with 140px based on device constraints.
-    const maxW = 140;
-
+    // Start with a reasonable max width
+    const maxW = 320;
     if (w > maxW) {
         const scale = maxW / w;
         w = Math.round(w * scale);
@@ -31,56 +29,56 @@ export async function fileToCompressedDataUrl(file: File) {
     const ctx = canvas.getContext("2d");
     if (!ctx) throw new Error("Canvas não suportado");
 
-    // Use white background for transparency handling
-    ctx.fillStyle = "#FFFFFF";
-    ctx.fillRect(0, 0, w, h);
+    // Helper to draw
+    const draw = (width: number, height: number) => {
+        canvas.width = width;
+        canvas.height = height;
+        ctx.fillStyle = "#FFFFFF";
+        ctx.fillRect(0, 0, width, height);
+        ctx.drawImage(img, 0, 0, width, height);
+    };
 
-    // Draw image
-    ctx.drawImage(img, 0, 0, w, h);
-
-    // Initial attempt
-    let dataUrl = canvas.toDataURL("image/jpeg", 0.6);
-
-    // Strict Limit: 12,500 chars (Safety margin for JSON payload)
+    // Target: 12500 chars (Safety margin for 14KB total payload)
     const MAX_CHARS = 12500;
 
+    // Initial: 320px
+    draw(w, h);
+
+    // Start with quality 0.6
+    let dataUrl = canvas.toDataURL("image/jpeg", 0.6);
+
+    // Iterative reduction
     if (dataUrl.length > MAX_CHARS) {
-        // Retry 1: Lower quality
-        dataUrl = canvas.toDataURL("image/jpeg", 0.5);
-    }
-
-    if (dataUrl.length > MAX_CHARS) {
-        // Retry 2: Smaller size (100px)
-        const scale2 = 0.7; // 140 * 0.7 ~= 98px
-        const w2 = Math.round(w * scale2);
-        const h2 = Math.round(h * scale2);
-
-        canvas.width = w2;
-        canvas.height = h2;
-        ctx.fillStyle = "#FFFFFF";
-        ctx.fillRect(0, 0, w2, h2);
-        ctx.drawImage(img, 0, 0, w2, h2);
-
-        dataUrl = canvas.toDataURL("image/jpeg", 0.5);
-    }
-
-    if (dataUrl.length > MAX_CHARS) {
-        // Retry 3: Tiny size (80px) and low quality
-        const scale3 = 0.5; // 140 * 0.5 = 70px
-        const w3 = Math.round(w * scale3);
-        const h3 = Math.round(h * scale3);
-
-        canvas.width = w3;
-        canvas.height = h3;
-        ctx.fillStyle = "#FFFFFF";
-        ctx.fillRect(0, 0, w3, h3);
-        ctx.drawImage(img, 0, 0, w3, h3);
-
+        // Attempt 2: Lower quality
         dataUrl = canvas.toDataURL("image/jpeg", 0.4);
     }
 
-    // Logging for debug
-    // console.log(`Compressed: ${w}x${h} -> ${dataUrl.length} chars (Target < ${MAX_CHARS})`);
+    if (dataUrl.length > MAX_CHARS) {
+        // Attempt 3: Reduce size to 240px
+        const w2 = 240;
+        const h2 = Math.round(img.height * (240 / img.width));
+        draw(w2, h2);
+        dataUrl = canvas.toDataURL("image/jpeg", 0.5);
+    }
+
+    if (dataUrl.length > MAX_CHARS) {
+        // Attempt 4: Reduce to 200px
+        const w3 = 200;
+        const h3 = Math.round(img.height * (200 / img.width));
+        draw(w3, h3);
+        dataUrl = canvas.toDataURL("image/jpeg", 0.5);
+    }
+
+    if (dataUrl.length > MAX_CHARS) {
+        // Attempt 5: Emergency Low (160px) and Low Quality
+        const w4 = 160;
+        const h4 = Math.round(img.height * (160 / img.width));
+        draw(w4, h4);
+        dataUrl = canvas.toDataURL("image/jpeg", 0.4);
+    }
+
+    // Sanity check log
+    // console.log(`Final Size: ${dataUrl.length} chars (Target < ${MAX_CHARS})`);
 
     URL.revokeObjectURL(imgUrl);
 

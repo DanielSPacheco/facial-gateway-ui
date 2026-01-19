@@ -18,6 +18,8 @@ export function FaceUpload({ currentPhoto, onPhotoSelected }: FaceUploadProps) {
     const [dimensions, setDimensions] = useState<{ w: number; h: number } | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
+    // ... imports ...
+
     // --- LOGIC: Validate & Convert to JPG ---
     const processImage = async (file: File) => {
         if (!file.type.startsWith("image/")) {
@@ -31,11 +33,15 @@ export function FaceUpload({ currentPhoto, onPhotoSelected }: FaceUploadProps) {
             // Use the shared utility which handles aggressive compression (target < 14KB)
             const { dataUrl, bytes } = await fileToCompressedDataUrl(file);
 
+            if (bytes > 13500) {
+                toast.warning(`Atenção: A imagem ficou com ${(bytes / 1024).toFixed(1)}KB. O limite é estritamente 14KB. Pode falhar.`);
+            }
+
             setPreview(dataUrl);
-            setDimensions({ w: 0, h: 0 }); // Placeholder since we don't track exact dims during strict limit
+            setDimensions({ w: 0, h: 0 });
             onPhotoSelected(dataUrl);
 
-            toast.success(`Foto processada! Tamanho: ${(bytes / 1024).toFixed(1)}KB`);
+            toast.success(`Foto processada! Tamanho Final: ${(bytes / 1024).toFixed(2)}KB`);
 
         } catch (err) {
             console.error(err);
@@ -44,6 +50,7 @@ export function FaceUpload({ currentPhoto, onPhotoSelected }: FaceUploadProps) {
             setProcessing(false);
         }
     };
+    // ... rest of file ...
 
     // --- HANDLERS ---
     const onDragOver = useCallback((e: React.DragEvent) => {

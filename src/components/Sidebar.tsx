@@ -68,7 +68,7 @@ export function Sidebar() {
             <div className="h-16 flex items-center px-6 border-b border-border mb-4">
                 <div className="flex items-center gap-2 font-bold text-lg tracking-tight text-foreground">
                     <ShieldCheck className="h-6 w-6 text-primary" />
-                    <span>Secure<span className="text-primary">Entry</span></span>
+                    <span>FS<span className="text-primary">Automation</span></span>
                 </div>
             </div>
 

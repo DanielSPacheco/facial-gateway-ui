@@ -28,9 +28,13 @@ export default function CreateUserPage() {
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const { name, value } = e.target;
 
-        // Validation for Card Number: Numeric only, max 10 chars
-        if (name === "cardNo") {
-            const numericValue = value.replace(/\D/g, "").slice(0, 10);
+        // Validation: Numeric Only Fields
+        if (name === "cardNo" || name === "userID" || name === "password") {
+            const numericValue = value.replace(/\D/g, "");
+
+            // Card specific length check (already handled by input maxLength but good to enforce)
+            if (name === "cardNo" && numericValue.length > 10) return;
+
             setFormData({ ...formData, [name]: numericValue });
             return;
         }
@@ -42,15 +46,6 @@ export default function CreateUserPage() {
         if (e.target.files && e.target.files[0]) {
             setSelectedFile(e.target.files[0]);
         }
-    };
-
-    const convertToBase64 = (file: File): Promise<string> => {
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.readAsDataURL(file);
-            reader.onload = () => resolve(reader.result as string);
-            reader.onerror = (error) => reject(error);
-        });
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -65,17 +60,21 @@ export default function CreateUserPage() {
             const userEmail = user?.email || "unknown";
 
             let base64Data = "";
+            let photoFlag = null; // What we save to DB (REGISTERED or null)
+
             if (selectedFile) {
                 const { dataUrl, bytes } = await fileToCompressedDataUrl(selectedFile);
-                if (bytes > 15 * 1024) {
+                if (bytes > 14500) { // Safety margin slightly above 14000 to catch edge cases, but utility targets <12500 chars 
                     toast.error(`Imagem muito grande (${Math.round(bytes / 1024)}KB). Limite ~14KB.`);
                     setLoading(false);
                     return;
                 }
                 base64Data = dataUrl;
+                photoFlag = "REGISTERED"; // Safe flag for DB
             }
 
             // 1. Insert into public.users (Source of Truth for UI)
+            // CRITICAL: Save 'REGISTERED' flag to photo_data, NOT the full base64 blob.
             const { data: userData, error: dbError } = await supabase.from("users").insert({
                 user_id: formData.userID,
                 name: formData.name,
@@ -84,10 +83,31 @@ export default function CreateUserPage() {
                 block: formData.block || null,
                 apartment: formData.apartment || null,
                 card_no: formData.cardNo || null,
-                photo_data: base64Data || null
+                photo_data: photoFlag, // <-- FIX: Lightweight flag
+                password: formData.password
             }).select().single();
 
             if (dbError) throw new Error("Failed to save user to DB: " + dbError.message);
+
+            // SYNC UNITS: Update the 'units' table if address is provided
+            if (formData.block && formData.apartment) {
+                const { data: unitData } = await supabase
+                    .from("units")
+                    .select("id")
+                    .eq("site_id", siteId)
+                    .eq("block", formData.block)
+                    .eq("name", formData.apartment)
+                    .maybeSingle();
+
+                if (unitData) {
+                    await supabase
+                        .from("units")
+                        .update({ responsible_id: userData.id })
+                        .eq("id", unitData.id);
+
+                    // Optional: Clear other units for this user? (New user, unrelated).
+                }
+            }
 
             // Fetch Devices to Sync
             const { data: devices } = await supabase
@@ -119,6 +139,8 @@ export default function CreateUserPage() {
                     facial_id: device.id, // Explicitly target device
                     type: "create_user",
                     payload: {
+                        facial_id: device.id,
+                        device_id: device.id, // Redundancy
                         userID: formData.userID,
                         userName: formData.name,
                         password: formData.password,
@@ -142,6 +164,8 @@ export default function CreateUserPage() {
                         facial_id: device.id,
                         type: "add_card",
                         payload: {
+                            facial_id: device.id,
+                            device_id: device.id, // Redundancy
                             userID: formData.userID,
                             cardNo: formData.cardNo,
                             triggered_by: userEmail
@@ -159,6 +183,8 @@ export default function CreateUserPage() {
                         facial_id: device.id,
                         type: "upload_face_base64",
                         payload: {
+                            facial_id: device.id,
+                            device_id: device.id, // Redundancy
                             userID: formData.userID,
                             photoData: base64Data,
                             triggered_by: userEmail
