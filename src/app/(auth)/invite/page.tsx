@@ -49,17 +49,10 @@ export default function InvitePage() {
         return;
       }
 
-      const { data, error } = await supabase.auth.getSessionFromUrl({ storeSession: true });
-      if (error) {
-        setError("Link inválido ou expirado. Solicite um novo convite.");
+      const { data: current } = await supabase.auth.getSession();
+      if (!current?.session) {
+        setError("Sessão não encontrada. Abra novamente o link do e-mail.");
         return;
-      }
-      if (!data?.session) {
-        const { data: current } = await supabase.auth.getSession();
-        if (!current?.session) {
-          setError("Sessão não encontrada. Abra novamente o link do e-mail.");
-          return;
-        }
       }
       setReady(true);
     };
