@@ -71,12 +71,12 @@ export default function DevicesPage() {
 
     return (
         <div className="space-y-6">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                 <div>
                     <h1 className="text-3xl font-bold tracking-tight">Equipamentos</h1>
                     <p className="text-muted-foreground">Gerencie os controladores de acesso e agentes.</p>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                     <DeviceConfigDialog
                         onUpdate={fetchData}
                         trigger={

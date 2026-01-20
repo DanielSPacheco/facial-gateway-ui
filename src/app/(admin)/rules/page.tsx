@@ -167,7 +167,7 @@ export default function RulesPage() {
 
     return (
         <div className="h-[calc(100vh-2rem)] flex flex-col space-y-4">
-            <div className="flex items-center justify-between shrink-0">
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between shrink-0">
                 <div>
                     <h1 className="text-3xl font-bold tracking-tight">Regras de Acesso</h1>
                     <p className="text-muted-foreground">Defina quais portas cada pessoa pode abrir.</p>

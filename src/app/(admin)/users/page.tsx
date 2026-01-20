@@ -128,12 +128,12 @@ export default function UsersPage() {
 
     return (
         <div className="space-y-6">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                 <div>
                     <h1 className="text-3xl font-bold tracking-tight">Pessoas</h1>
                     <p className="text-muted-foreground">Gerencie moradores, tags e reconhecimento facial.</p>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                     <Button variant="outline" size="icon" onClick={fetchUsers}>
                         <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
                     </Button>
@@ -151,7 +151,7 @@ export default function UsersPage() {
                     <CardTitle>Todos os Usuários</CardTitle>
                 </CardHeader>
                 <CardContent>
-                    <div className="rounded-md border">
+                    <div className="rounded-md border overflow-x-auto">
                         <table className="w-full text-sm">
                             <thead className="bg-muted/50 border-b">
                                 <tr className="text-left">

@@ -21,8 +21,8 @@ export default function Dashboard() {
     };
 
     return (
-        <div className="p-8 space-y-6">
-            <div className="flex items-center justify-between">
+        <div className="space-y-6">
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                 <div>
                     <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
                 </div>

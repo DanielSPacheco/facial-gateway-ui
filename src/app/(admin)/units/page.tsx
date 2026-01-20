@@ -111,7 +111,7 @@ export default function UnitsPage() {
 
     return (
         <div className="space-y-6">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                 <div>
                     <h1 className="text-3xl font-bold tracking-tight">Unidades</h1>
                     <p className="text-muted-foreground">Gerencie blocos e apartamentos do condomínio.</p>
@@ -124,12 +124,12 @@ export default function UnitsPage() {
 
             <Card className="bg-card">
                 <CardHeader className="pb-3">
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                         <CardTitle className="text-lg flex items-center gap-2">
                             <Building className="h-5 w-5 text-primary" />
                             Lista de Unidades
                         </CardTitle>
-                        <div className="relative w-64">
+                        <div className="relative w-full md:w-64">
                             <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
                             <Input
                                 placeholder="Buscar bloco ou apto..."
@@ -141,7 +141,7 @@ export default function UnitsPage() {
                     </div>
                 </CardHeader>
                 <CardContent>
-                    <div className="rounded-md border">
+                    <div className="rounded-md border overflow-x-auto">
                         <table className="w-full text-sm">
                             <thead className="bg-muted/50 border-b">
                                 <tr className="text-left">

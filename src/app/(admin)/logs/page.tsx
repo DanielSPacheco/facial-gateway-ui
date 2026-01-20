@@ -222,7 +222,7 @@ export default function LogsPage() {
 
     return (
         <div className="space-y-6">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                 <div>
                     <h1 className="text-3xl font-bold tracking-tight">Logs & Auditoria</h1>
                     <p className="text-muted-foreground">Histórico de ações do sistema e acessos físicos.</p>
@@ -247,12 +247,12 @@ export default function LogsPage() {
                 <TabsContent value="system" className="mt-6">
                     <Card>
                         <CardHeader>
-                            <div className="flex items-center justify-between">
+                            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                                 <CardTitle className="text-lg flex items-center gap-2">
                                     <Shield className="h-5 w-5 text-primary" />
                                     Atividades do Sistema
                                 </CardTitle>
-                                <div className="relative w-64">
+                                <div className="relative w-full md:w-64">
                                     <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
                                     <Input
                                         placeholder="Filtrar..."
@@ -264,7 +264,7 @@ export default function LogsPage() {
                             </div>
                         </CardHeader>
                         <CardContent>
-                            <div className="rounded-md border">
+                            <div className="rounded-md border overflow-x-auto">
                                 <table className="w-full text-sm">
                                     <thead className="bg-muted/50 border-b">
                                         <tr className="text-left">
@@ -310,13 +310,13 @@ export default function LogsPage() {
                 <TabsContent value="audit" className="mt-6">
                     <Card>
                         <CardHeader>
-                            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                                 <CardTitle className="text-lg flex items-center gap-2">
                                     <Activity className="h-5 w-5 text-blue-500" />
                                     Eventos de Acesso (Dispositivos)
                                 </CardTitle>
 
-                                <div className="flex items-center gap-2 min-w-[300px]">
+                                <div className="flex flex-col gap-2 md:flex-row md:items-center md:min-w-[300px]">
                                     <Label>Dispositivo:</Label>
                                     <Select value={selectedDeviceId} onValueChange={setSelectedDeviceId}>
                                         <SelectTrigger className="flex-1">
@@ -334,7 +334,7 @@ export default function LogsPage() {
                             </div>
                         </CardHeader>
                         <CardContent>
-                            <div className="rounded-md border">
+                            <div className="rounded-md border overflow-x-auto">
                                 <table className="w-full text-sm">
                                     <thead className="bg-muted/50 border-b">
                                         <tr className="text-left">

@@ -10,8 +10,8 @@ export default function AdminLayout({
     return (
         <div className="min-h-screen bg-background">
             <Sidebar />
-            <main className="pl-64 min-h-screen">
-                <div className="p-8 max-w-7xl mx-auto">
+            <main className="min-h-screen pt-14 md:pt-0 md:pl-64">
+                <div className="px-4 py-6 sm:px-6 lg:px-8 max-w-7xl mx-auto">
                     <AccessGate>{children}</AccessGate>
                 </div>
             </main>

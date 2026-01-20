@@ -527,11 +527,11 @@ export default function EditUserPage() {
         }
     };
 
-    if (loading) return <div className="p-8"><Loader2 className="h-6 w-6 animate-spin" /></div>;
+    if (loading) return <div className="p-4 sm:p-6 lg:p-8"><Loader2 className="h-6 w-6 animate-spin" /></div>;
 
     return (
-        <div className="p-8 max-w-4xl mx-auto space-y-6">
-            <div className="flex items-center justify-between">
+        <div className="p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto space-y-6">
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                 <div>
                     <h1 className="text-3xl font-bold tracking-tight">{formData.name || "Editando Usuário"}</h1>
                     <p className="text-muted-foreground flex items-center gap-2">
@@ -542,7 +542,7 @@ export default function EditUserPage() {
             </div>
 
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-                <TabsList className="grid w-full grid-cols-4 lg:w-[600px] mb-4 bg-gray-900/50 p-1">
+                <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 lg:w-[600px] mb-4 bg-gray-900/50 p-1">
                     <TabsTrigger value="personal">Dados pessoais</TabsTrigger>
                     <TabsTrigger value="unit">Unidade</TabsTrigger>
                     <TabsTrigger value="card">Cartão / Tag</TabsTrigger>
