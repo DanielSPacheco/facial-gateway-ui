@@ -99,23 +99,33 @@ export function Sidebar() {
         );
     }
 
+    const blockedItems = new Set([
+        "Equipamentos",
+        "Regras",
+        "Logs",
+        "Equipe",
+        "Integrações",
+        "Configurações",
+    ]);
+
+    const isBlocked = (label: string) => role === "operator" && blockedItems.has(label);
+
     const filteredGroups = sidebarGroups.map((group) => {
         if (role !== "operator") return group;
-        const blocked = new Set([
-            "Equipamentos",
-            "Regras",
-            "Logs",
-            "Equipe",
-            "Integrações",
-            "Configurações",
-        ]);
         return {
             ...group,
-            items: group.items.filter((item) => !blocked.has(item.label)),
+            items: group.items.filter((item) => !isBlocked(item.label)),
         };
     });
 
     const handleNavigate = () => setMobileOpen(false);
+
+    const mobileNavItems = [
+        { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+        { label: "Pessoas", href: "/users", icon: Users },
+        { label: "Equipamentos", href: "/devices", icon: HardDrive },
+        { label: "Logs", href: "/logs", icon: FileClock },
+    ].filter((item) => !isBlocked(item.label));
 
     const sidebarHeader = (
         <div className="h-16 flex items-center justify-between px-6 border-b border-border mb-4">
@@ -225,6 +235,33 @@ export function Sidebar() {
             <aside className="hidden md:flex h-screen w-64 bg-card border-r border-border flex-col fixed left-0 top-0 z-40">
                 {sidebarContent}
             </aside>
+
+            <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 border-t border-border bg-card/95 backdrop-blur">
+                <div
+                    className={cn(
+                        "grid h-14",
+                        mobileNavItems.length === 3 ? "grid-cols-3" : "grid-cols-4"
+                    )}
+                >
+                    {mobileNavItems.map((item) => {
+                        const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
+                        return (
+                            <Link
+                                key={item.href}
+                                href={item.href}
+                                onClick={handleNavigate}
+                                className={cn(
+                                    "flex flex-col items-center justify-center gap-1 text-[11px] font-medium transition-colors",
+                                    isActive ? "text-primary" : "text-muted-foreground"
+                                )}
+                            >
+                                <item.icon className="h-4 w-4" />
+                                {item.label}
+                            </Link>
+                        );
+                    })}
+                </div>
+            </nav>
         </>
     );
 }

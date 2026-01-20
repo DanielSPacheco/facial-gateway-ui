@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase/client";
 import { getSiteContext } from "@/lib/site-context";
-import { buildGatewayUrl } from "@/lib/gateway";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Activity, Zap, Server, ShieldCheck } from "lucide-react";
 
@@ -48,7 +47,7 @@ function LiveSnapshotPreview({ deviceId, channel = 1 }: { deviceId: string; chan
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
                 key={timestamp} // Force re-mount to ensure clean request
-                src={`${buildGatewayUrl(`/facial/${deviceId}/snapshot`)}?channel=${channel}&t=${timestamp}`}
+                src={`/api/snapshot?deviceId=${encodeURIComponent(deviceId)}&channel=${channel}&t=${timestamp}`}
                 alt="Live Preview"
                 className={`w-full h-full object-cover transition-opacity duration-300 ${loading ? 'opacity-50' : 'opacity-100'}`}
                 onLoad={() => {
