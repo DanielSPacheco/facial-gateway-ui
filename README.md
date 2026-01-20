@@ -72,24 +72,7 @@ This project is designed as a **SaaS / IoT foundation**, enabling centralized ma
 
 ## ▶️ Running Locally
 
-### Backend
-
-```bash
-npm install
-npm run dev
-
-```
-.Env example
-
-``` .env
-INTELBRAS_HOST=
-INTELBRAS_USER=
-INTELBRAS_PASSWORD=
-PORT=3000
-
-```
-
-Frontend
+### Frontend
 
 ```bash
 npm install
@@ -101,6 +84,7 @@ Create .env local
 
 ``` .env
 NEXT_PUBLIC_API_URL=http://localhost:3000
+NEXT_PUBLIC_GATEWAY_URL=http://127.0.0.1:4000
 
 ```
 

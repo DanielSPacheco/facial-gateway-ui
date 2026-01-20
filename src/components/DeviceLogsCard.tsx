@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Loader2, Image as ImageIcon, FileText } from "lucide-react";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { buildGatewayUrl } from "@/lib/gateway";
 
 interface EventRecord {
     RecNo: number;
@@ -23,10 +24,9 @@ interface EventRecord {
 
 interface DeviceLogsCardProps {
     deviceId: string;
-    deviceIp: string; // Needed to build snapshot URL if FileURL is relative
 }
 
-export function DeviceLogsCard({ deviceId, deviceIp }: DeviceLogsCardProps) {
+export function DeviceLogsCard({ deviceId }: DeviceLogsCardProps) {
     const [logs, setLogs] = useState<EventRecord[]>([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -35,10 +35,13 @@ export function DeviceLogsCard({ deviceId, deviceIp }: DeviceLogsCardProps) {
         setLoading(true);
         setError(null);
         try {
-            // Fetch last 24h by default or just recent 50
-            // The service defaults to limit=50 if we don't pass params
-            // We'll just hit the endpoint
-            const res = await fetch(`http://localhost:4000/facial/events/${deviceId}?limit=20`);
+            const now = new Date();
+            const from = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
+            const to = now.toISOString();
+
+            const res = await fetch(
+                `${buildGatewayUrl(`/facial/events/${deviceId}`)}?from=${from}&to=${to}&limit=20`
+            );
             const data = await res.json();
 
             if (!data.ok) {

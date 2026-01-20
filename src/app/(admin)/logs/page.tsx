@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/lib/supabase/client";
 import { getSiteContext } from "@/lib/site-context";
+import { buildGatewayUrl } from "@/lib/gateway";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
     Shield,
@@ -93,7 +94,7 @@ export default function LogsPage() {
     const [auditRecords, setAuditRecords] = useState<AuditRecord[]>([]);
     const [loadingAudit, setLoadingAudit] = useState(false);
     const [devices, setDevices] = useState<FacialDevice[]>([]);
-    const [selectedDeviceIp, setSelectedDeviceIp] = useState<string>("");
+    const [selectedDeviceId, setSelectedDeviceId] = useState<string>("");
 
     // Common State
     const [selectedSnapshot, setSelectedSnapshot] = useState<string | null>(null);
@@ -114,8 +115,8 @@ export default function LogsPage() {
         if (data && data.length > 0) {
             setDevices(data);
             // Default to first device
-            if (!selectedDeviceIp) {
-                setSelectedDeviceIp(data[0].ip);
+            if (!selectedDeviceId) {
+                setSelectedDeviceId(data[0].id);
             }
         }
     };
@@ -142,7 +143,7 @@ export default function LogsPage() {
     };
 
     const fetchAuditLogs = async () => {
-        if (!selectedDeviceIp) return;
+        if (!selectedDeviceId) return;
 
         setLoadingAudit(true);
         try {
@@ -152,7 +153,7 @@ export default function LogsPage() {
             const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59).toISOString();
 
             // Using local gateway endpoint (assuming port 4000 based on recent fixes)
-            const url = `http://127.0.0.1:4000/facial/audit/access/${selectedDeviceIp}?from=${startOfDay}&to=${endOfDay}&limit=50&offset=0`;
+            const url = `${buildGatewayUrl(`/facial/audit/access/${selectedDeviceId}`)}?from=${startOfDay}&to=${endOfDay}&limit=50&offset=0`;
 
             const res = await fetch(url);
             const data: AuditResponse = await res.json();
@@ -172,10 +173,10 @@ export default function LogsPage() {
 
     // Auto-fetch audit when tab or device changes
     useEffect(() => {
-        if (activeTab === "audit" && selectedDeviceIp) {
+        if (activeTab === "audit" && selectedDeviceId) {
             fetchAuditLogs();
         }
-    }, [activeTab, selectedDeviceIp]);
+    }, [activeTab, selectedDeviceId]);
 
 
     // --- Formatters ---
@@ -317,13 +318,13 @@ export default function LogsPage() {
 
                                 <div className="flex items-center gap-2 min-w-[300px]">
                                     <Label>Dispositivo:</Label>
-                                    <Select value={selectedDeviceIp} onValueChange={setSelectedDeviceIp}>
+                                    <Select value={selectedDeviceId} onValueChange={setSelectedDeviceId}>
                                         <SelectTrigger className="flex-1">
                                             <SelectValue placeholder="Selecione um dispositivo" />
                                         </SelectTrigger>
                                         <SelectContent>
                                             {devices.map(d => (
-                                                <SelectItem key={d.id} value={d.ip}>
+                                                <SelectItem key={d.id} value={d.id}>
                                                     {d.name} ({d.ip})
                                                 </SelectItem>
                                             ))}
@@ -365,18 +366,16 @@ export default function LogsPage() {
                                                     fullSnapshotUrl = rec.snapshotUrl;
                                                 } else {
                                                     // Construct the proxy URL
-                                                    // We need the device IP. rec.deviceId might be UUID or IP?
-                                                    // The `selectedDeviceIp` state is the IP.
-                                                    // Ideally `rec.deviceId` from the audit endpoint should be robust.
-                                                    // But since we filter by `selectedDeviceIp` in fetchAuditLogs, we can use that if rec.deviceId is missing or different.
+                                                    // We need the device id used by the gateway.
+                                                    // Since we filter by `selectedDeviceId` in fetchAuditLogs, we use it here.
 
                                                     // The user used: http://127.0.0.1:4000/facial/events/192.168.3.227/photo?url=...
 
-                                                    const targetIp = selectedDeviceIp; // Safe assumption since we list events FOR this IP
+                                                    const targetDeviceId = selectedDeviceId;
 
                                                     // Ensure we have a valid path to encode
                                                     const encodedPath = encodeURIComponent(rec.snapshotUrl);
-                                                    fullSnapshotUrl = `http://127.0.0.1:4000/facial/events/${targetIp}/photo?url=${encodedPath}`;
+                                                    fullSnapshotUrl = `${buildGatewayUrl(`/facial/events/${targetDeviceId}/photo`)}?url=${encodedPath}`;
                                                 }
                                             }
 

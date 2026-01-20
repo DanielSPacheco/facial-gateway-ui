@@ -23,11 +23,20 @@ export async function POST(request: NextRequest) {
         );
 
         // 1. Invite User by Email
-        const { data: authData, error: authError } = await supabaseAdmin.auth.admin.inviteUserByEmail(email);
+        const baseUrl = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin;
+        const redirectTo = `${baseUrl.replace(/\/+$/, "")}/invite`;
+
+        const { data: authData, error: authError } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
+            redirectTo
+        });
 
         if (authError) {
             console.error('Error inviting user:', authError);
-            return NextResponse.json({ error: authError.message }, { status: 500 });
+            const msg = authError.message || "Invite failed";
+            if (String(msg).includes("expected pattern")) {
+                return NextResponse.json({ error: "Redirect URL não permitido. Adicione o URL em Authentication → URL Configuration." }, { status: 500 });
+            }
+            return NextResponse.json({ error: msg }, { status: 500 });
         }
 
         const newUserId = authData.user.id;
@@ -51,6 +60,7 @@ export async function POST(request: NextRequest) {
                     name: name,
                     role: role,
                     client_id: clientId, // Ensure they are in right client context
+                    email: email
                     // You might want to update or set other fields
                 })
                 .eq('id', existingUser.id);
@@ -63,6 +73,7 @@ export async function POST(request: NextRequest) {
                     name: name,
                     role: role,
                     client_id: clientId,
+                    email: email
                     // Add any other required fields for your schema
                     // email: email // If your public users table has email
                 });

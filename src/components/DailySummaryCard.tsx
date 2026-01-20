@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Activity, User, Unlock, Globe, CreditCard } from "lucide-react"; // Icons
 import { supabase } from "@/lib/supabase/client";
 import { getSiteContext } from "@/lib/site-context";
+import { buildGatewayUrl } from "@/lib/gateway";
 
 interface SummaryStats {
     totalFacial: number;
@@ -53,7 +54,7 @@ export function DailySummaryCard({ lastRefreshed }: { lastRefreshed: Date }) {
             // Ideally all. Let's get devices first.
             const { data: devices } = await supabase
                 .from("facials")
-                .select("ip")
+                .select("id")
                 .eq("site_id", siteId);
 
             let facialCount = 0;
@@ -65,13 +66,13 @@ export function DailySummaryCard({ lastRefreshed }: { lastRefreshed: Date }) {
                 const promises = devices.map(async (dev) => {
                     try {
                         // Assuming backend port 4000
-                        const url = `http://127.0.0.1:4000/facial/audit/access/${dev.ip}?from=${startOfDay}&to=${endOfDay}&limit=1000`;
+                        const url = `${buildGatewayUrl(`/facial/audit/access/${dev.id}`)}?from=${startOfDay}&to=${endOfDay}&limit=1000`;
                         const res = await fetch(url);
                         if (!res.ok) return [];
                         const data = await res.json();
                         return data.ok ? data.records : [];
                     } catch (e) {
-                        console.error(`Failed to fetch stats for ${dev.ip}`, e);
+                        console.error(`Failed to fetch stats for ${dev.id}`, e);
                         return [];
                     }
                 });

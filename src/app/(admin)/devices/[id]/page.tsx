@@ -96,7 +96,7 @@ export default function DeviceDetailsPage({ params }: { params: Promise<{ id: st
 
                 {/* Action / Logs Area */}
                 <div className="md:col-span-2 space-y-6">
-                    <DeviceLogsCard deviceId={device.id} deviceIp={device.ip} />
+                    <DeviceLogsCard deviceId={device.id} />
                 </div>
             </div>
         </div>

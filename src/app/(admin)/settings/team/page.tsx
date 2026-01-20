@@ -53,15 +53,25 @@ export default function TeamPage() {
         fetchTeam();
     }, []);
 
-    const handleDelete = async (id: string) => {
+    const handleDelete = async (id: string, userId?: string, email?: string) => {
         if (!confirm("Tem certeza que deseja remover este membro da equipe?")) return;
 
-        const { error } = await supabase.from("users").delete().eq("id", id);
-        if (error) {
-            toast.error("Erro ao deletar: " + error.message);
-        } else {
+        try {
+            const response = await fetch("/api/admin/delete-user", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ id, userId, email })
+            });
+
+            const data = await response.json();
+            if (!response.ok || !data?.success) {
+                throw new Error(data?.error || "Falha ao remover usuário.");
+            }
+
             toast.success("Membro removido.");
             fetchTeam();
+        } catch (err: any) {
+            toast.error("Erro ao deletar: " + err.message);
         }
     };
 
@@ -142,7 +152,7 @@ export default function TeamPage() {
                                                     variant="ghost"
                                                     size="icon"
                                                     className="text-red-500 hover:text-red-600"
-                                                    onClick={() => handleDelete(user.id)}
+                                                    onClick={() => handleDelete(user.id, user.user_id, user.email)}
                                                 >
                                                     <Trash2 className="h-4 w-4" />
                                                 </Button>

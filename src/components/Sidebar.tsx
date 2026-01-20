@@ -46,6 +46,8 @@ const sidebarGroups = [
 export function Sidebar() {
     const pathname = usePathname();
     const router = useRouter();
+    const [role, setRole] = useState<string | null>(null);
+    const [loadingRole, setLoadingRole] = useState(true);
 
     const handleLogout = async () => {
         await supabase.auth.signOut();
@@ -58,9 +60,47 @@ export function Sidebar() {
         setIsMounted(true);
     }, []);
 
+    useEffect(() => {
+        const loadRole = async () => {
+            const { data: userData } = await supabase.auth.getUser();
+            const userId = userData?.user?.id;
+            if (!userId) {
+                setLoadingRole(false);
+                return;
+            }
+
+            const { data } = await supabase
+                .from("users")
+                .select("role")
+                .eq("user_id", userId)
+                .maybeSingle();
+
+            setRole(data?.role || null);
+            setLoadingRole(false);
+        };
+
+        loadRole();
+    }, []);
+
     if (!isMounted) {
         return <div className="h-screen w-64 bg-card border-r border-border flex flex-col fixed left-0 top-0 z-40" />; // Empty placeholder to prevent layout shift
     }
+
+    const filteredGroups = sidebarGroups.map((group) => {
+        if (role !== "operator") return group;
+        const blocked = new Set([
+            "Equipamentos",
+            "Regras",
+            "Logs",
+            "Equipe",
+            "Integrações",
+            "Configurações",
+        ]);
+        return {
+            ...group,
+            items: group.items.filter((item) => !blocked.has(item.label)),
+        };
+    });
 
     return (
         <div className="h-screen w-64 bg-card border-r border-border flex flex-col fixed left-0 top-0 z-40">
@@ -74,7 +114,7 @@ export function Sidebar() {
 
             {/* Nav */}
             <nav className="flex-1 px-4 space-y-6 overflow-y-auto">
-                {sidebarGroups.map((group) => (
+                {filteredGroups.map((group) => (
                     <div key={group.title}>
                         <h3 className="mb-2 px-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground/60">
                             {group.title}

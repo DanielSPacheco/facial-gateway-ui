@@ -51,18 +51,7 @@ export function SystemUserDialog({ open, onOpenChange, userToEdit, onSuccess }: 
         setLoading(true);
 
         try {
-            const { siteId, clientId } = await getSiteContext();
-
-            // Prepare payload
-            const payload = {
-                name: formData.name,
-                email: formData.email,
-                role: formData.role,
-                client_id: clientId,
-                user_id: userToEdit ? userToEdit.user_id : `sys_${Date.now()}`, // Temporary ID generation for system users if not standard
-                // System users might not need 'user_id' for devices, but the schema requires it. 
-                // We'll generate a dummy one or use UUID if schema allows. Schema says user_id text not null unique.
-            };
+            const { clientId } = await getSiteContext();
 
             if (userToEdit) {
                 const { error } = await supabase
@@ -77,12 +66,23 @@ export function SystemUserDialog({ open, onOpenChange, userToEdit, onSuccess }: 
                 if (error) throw error;
                 toast.success("Usuário atualizado com sucesso");
             } else {
-                const { error } = await supabase
-                    .from("users")
-                    .insert(payload);
+                const response = await fetch("/api/admin/invite-user", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        email: formData.email,
+                        name: formData.name,
+                        role: formData.role,
+                        clientId,
+                    }),
+                });
 
-                if (error) throw error;
-                toast.success("Usuário criado com sucesso");
+                const data = await response.json();
+                if (!response.ok || !data?.success) {
+                    throw new Error(data?.error || "Falha ao convidar usuário.");
+                }
+
+                toast.success("Convite enviado com sucesso");
             }
 
             onSuccess();
